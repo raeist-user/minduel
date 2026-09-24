@@ -86,12 +86,17 @@
             <div class="mb-4">
                 <label class="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-2 pl-1">Username</label>
                 <input id="reg-username" required minlength="3" maxlength="20" autocomplete="username"
+                    autocapitalize="none" spellcheck="false"
+                    oninput="onFieldInput('username')"
                     class="w-full bg-input-bg border border-border-color text-text-primary text-base rounded-xl px-4 py-3.5 outline-none transition-all duration-200 input-glow placeholder:text-text-secondary/30">
+                <p id="reg-username-status" class="text-[11px] mt-2 pl-1 min-h-[16px] text-text-secondary">3-20 letters, numbers or underscores.</p>
             </div>
             <div class="mb-4">
                 <label class="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-2 pl-1">Email</label>
                 <input id="reg-email" type="email" required autocomplete="email"
+                    oninput="onFieldInput('email')"
                     class="w-full bg-input-bg border border-border-color text-text-primary text-base rounded-xl px-4 py-3.5 outline-none transition-all duration-200 input-glow placeholder:text-text-secondary/30">
+                <p id="reg-email-status" class="text-[11px] mt-2 pl-1 min-h-[16px] text-text-secondary"></p>
             </div>
             <div class="mb-8">
                 <label class="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-2 pl-1">Password</label>
@@ -100,7 +105,7 @@
                 <p class="text-[11px] text-text-secondary mt-2">At least 6 characters.</p>
             </div>
             <button type="submit" id="register-submit"
-                class="w-full bg-accent-green text-app-bg font-bold py-4 rounded-xl hover:bg-opacity-90 transition-all duration-200 shadow-[0_0_15px_rgba(163,230,53,0.3)]">
+                class="w-full bg-accent-green text-app-bg font-bold py-4 rounded-xl hover:bg-opacity-90 transition-all duration-200 shadow-[0_0_15px_rgba(163,230,53,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
                 <span id="register-btn-text">CREATE ACCOUNT</span>
             </button>
         </form>
@@ -167,7 +172,11 @@
         } catch (parseErr) {
             throw new Error(`Server returned an unexpected response (status ${res.status}).`);
         }
-        if (!res.ok) throw new Error(data.message || `Request failed (status ${res.status})`);
+        if (!res.ok) {
+            const err = new Error(data.message || `Request failed (status ${res.status})`);
+            err.field = data.field;
+            throw err;
+        }
         return data;
     }
 
@@ -175,6 +184,77 @@
         localStorage.setItem('minduel_token', data.token);
         localStorage.setItem('minduel_user', JSON.stringify(data.user));
         window.location.href = '/home.html';
+    }
+
+    // ---------- Live availability check (register form) ----------
+    const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
+    const EMAIL_RE = /^\S+@\S+\.\S+$/;
+    const DEBOUNCE_MS = 400;
+
+    // field -> 'idle' | 'checking' | 'ok' | 'bad'
+    const fieldState = { username: 'idle', email: 'idle' };
+    const timers = {};
+    const requestSeq = { username: 0, email: 0 };
+
+    const fieldEls = {
+        username: { input: () => document.getElementById('reg-username'), status: () => document.getElementById('reg-username-status') },
+        email:    { input: () => document.getElementById('reg-email'),    status: () => document.getElementById('reg-email-status') },
+    };
+
+    function setFieldStatus(field, state, message) {
+        fieldState[field] = state;
+        const el = fieldEls[field].status();
+        const input = fieldEls[field].input();
+        const colors = { idle: 'text-text-secondary', checking: 'text-text-secondary', ok: 'text-accent-green', bad: 'text-red-400' };
+        el.className = 'text-[11px] mt-2 pl-1 min-h-[16px] ' + colors[state];
+        el.textContent = message;
+        input.style.borderColor = state === 'bad' ? '#F87171' : state === 'ok' ? '#A3E635' : '';
+    }
+
+    function onFieldInput(field) {
+        clearTimeout(timers[field]);
+        requestSeq[field]++; // invalidate any in-flight response for older text
+        const value = fieldEls[field].input().value.trim();
+
+        if (!value) {
+            setFieldStatus(field, 'idle', field === 'username' ? '3-20 letters, numbers or underscores.' : '');
+            return;
+        }
+
+        // Cheap local checks first: no network call for obviously invalid input.
+        if (field === 'username' && !USERNAME_RE.test(value)) {
+            const msg = value.length < 3
+                ? 'Keep typing — at least 3 characters.'
+                : 'Only letters, numbers and underscores (3-20 characters).';
+            setFieldStatus(field, value.length < 3 ? 'idle' : 'bad', msg);
+            return;
+        }
+        if (field === 'email' && !EMAIL_RE.test(value)) {
+            setFieldStatus(field, 'idle', '');
+            return;
+        }
+
+        setFieldStatus(field, 'checking', 'Checking...');
+        timers[field] = setTimeout(() => checkAvailability(field, value), DEBOUNCE_MS);
+    }
+
+    async function checkAvailability(field, value) {
+        const seq = ++requestSeq[field];
+        try {
+            const res = await fetch('/api/auth/check-availability?' + new URLSearchParams({ [field]: value }));
+            if (res.status === 429) {
+                if (seq === requestSeq[field]) setFieldStatus(field, 'idle', 'Checking paused — you can still submit.');
+                return;
+            }
+            const data = await res.json();
+            if (seq !== requestSeq[field]) return; // a newer keystroke superseded this reply
+            const r = data[field];
+            if (!r) return setFieldStatus(field, 'idle', '');
+            setFieldStatus(field, r.available ? 'ok' : 'bad', r.message);
+        } catch (e) {
+            // Network hiccup: don't block the user. The server re-checks on submit.
+            if (seq === requestSeq[field]) setFieldStatus(field, 'idle', '');
+        }
     }
 
     async function handleLogin(e) {
@@ -200,6 +280,16 @@
     async function handleRegister(e) {
         e.preventDefault();
         hideMessages();
+
+        if (fieldState.username === 'bad' || fieldState.email === 'bad') {
+            showError('Please fix the highlighted fields before continuing.');
+            return;
+        }
+        if (fieldState.username === 'checking' || fieldState.email === 'checking') {
+            showError('Still checking availability — one second.');
+            return;
+        }
+
         const btn = document.getElementById('register-submit');
         const text = document.getElementById('register-btn-text');
         btn.disabled = true;
@@ -212,6 +302,10 @@
             });
             onAuthSuccess(data);
         } catch (err) {
+            // Someone may have grabbed the name between the live check and submit.
+            if (err.field === 'username' || err.field === 'email') {
+                setFieldStatus(err.field, 'bad', err.message);
+            }
             showError(err.message);
             btn.disabled = false;
             text.textContent = 'CREATE ACCOUNT';
