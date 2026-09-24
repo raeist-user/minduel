@@ -81,7 +81,7 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Minduel backend running on port ${PORT}`);
+  console.log(`Aptiks backend running on port ${PORT}`);
   // Report email status in the logs right away so a misconfigured SMTP
   // setup is obvious at deploy time, not when a user first needs a reset.
   verifyEmailSetup();

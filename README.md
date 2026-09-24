@@ -1,7 +1,7 @@
-# Minduel — Backend (Auth + Security + Personalization + Moderation)
+# Aptiks — Backend (Auth + Security + Personalization + Moderation)
 
 Accounts, authentication, password reset, and profile personalization for
-Minduel. Matchmaking, questions, and real-time gameplay come next.
+Aptiks. Matchmaking, questions, and real-time gameplay come next.
 
 ## Stack
 - Node.js + Express
@@ -198,7 +198,7 @@ does) and tighten the CSP once assets are bundled.
   every deploy. If photos ever become large or numerous, move them to S3 or
   Cloudinary and keep only the URL in `avatarUrl`. Nothing else has to change.
 - No photo -> the UI shows the user's initial on one fixed brand color
-  (`#A3E635`). Avatar background colors were removed; old `avatarColor` values
+  (`#E2B714`). Avatar background colors were removed; old `avatarColor` values
   still in the database are harmless and ignored.
 
 ## Email (password reset)
@@ -318,3 +318,10 @@ Atlas → Database Access → create a user, use its connection string as
 4. **Scoring engine** (correctness + speed + difficulty).
 5. **Results + rating update** (Elo-style) + **leaderboard** + **match
    history**.
+
+
+## Notes
+- Staff badges/roles are never sent to other players (only to the account itself and to staff via the staff panel).
+- DMs are deleted after 30 days (TTL indexes in `Message.js` / `Conversation.js`; Mongoose creates them at startup, so keep `autoIndex` on or create them manually in production).
+- Accent color is `#E2B714` (Monkeytype yellow); presence dots and success text use `#4ADE80`.
+- Browser storage keys are still prefixed `minduel_` on purpose, so renaming the app does not sign everyone out.

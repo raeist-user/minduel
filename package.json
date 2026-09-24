@@ -1,7 +1,7 @@
 {
   "name": "minduel-backend",
   "version": "0.1.0",
-  "description": "Minduel - Analytical Competition MVP backend (auth foundation)",
+  "description": "Aptiks - Analytical Competition MVP backend (auth foundation)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
