@@ -1,1 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Minduel - Auth Test</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 16px; background:#0f172a; color:#e2e8f0; }
+  h1 { font-size: 1.4rem; }
+  fieldset { border: 1px solid #334155; border-radius: 8px; margin-bottom: 20px; padding: 16px; }
+  legend { padding: 0 8px; color:#93c5fd; }
+  input { display:block; width:100%; margin-bottom:8px; padding:8px; border-radius:6px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; box-sizing: border-box; }
+  button { padding:8px 14px; border-radius:6px; border:none; background:#3b82f6; color:white; cursor:pointer; }
+  button:hover { background:#2563eb; }
+  pre { background:#1e293b; padding:12px; border-radius:6px; overflow:auto; font-size:0.85rem; }
+</style>
+</head>
+<body>
+  <h1>Minduel — Auth Test Page</h1>
+  <p>Quick manual test harness for the register / login / me endpoints. Remove or password-protect before going live.</p>
 
+  <fieldset>
+    <legend>Register</legend>
+    <input id="reg-username" placeholder="username" />
+    <input id="reg-email" placeholder="email" />
+    <input id="reg-password" type="password" placeholder="password" />
+    <button onclick="register()">Register</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Login</legend>
+    <input id="login-id" placeholder="email or username" />
+    <input id="login-password" type="password" placeholder="password" />
+    <button onclick="login()">Login</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Me (protected)</legend>
+    <button onclick="me()">Get current user</button>
+  </fieldset>
+
+  <h3>Response</h3>
+  <pre id="output">—</pre>
+
+<script>
+  let token = localStorage.getItem('minduel_token') || null;
+
+  function show(data) {
+    document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+  }
+
+  async function register() {
+    const body = {
+      username: document.getElementById('reg-username').value,
+      email: document.getElementById('reg-email').value,
+      password: document.getElementById('reg-password').value,
+    };
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.token) { token = data.token; localStorage.setItem('minduel_token', token); }
+    show(data);
+  }
+
+  async function login() {
+    const body = {
+      emailOrUsername: document.getElementById('login-id').value,
+      password: document.getElementById('login-password').value,
+    };
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.token) { token = data.token; localStorage.setItem('minduel_token', token); }
+    show(data);
+  }
+
+  async function me() {
+    const res = await fetch('/api/auth/me', {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    const data = await res.json();
+    show(data);
+  }
+</script>
+</body>
+</html>
