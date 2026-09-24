@@ -137,22 +137,25 @@ function avatarEl(user, sizeCls, textCls, online) {
         h('span', { class: 'online-dot ' + (online ? 'bg-accent-green' : 'bg-[#555]') }));
 }
 
-// Discord-style staff badge. Everything in here is a fixed string, never user text.
+// Staff badge: a small icon only (no text, no pill). Admin = verified seal in
+// gold, moderator = shield in blue. Meaning is in the tooltip / aria-label.
+// Everything in here is a fixed string, never user text.
 const BADGE_ICONS = {
-    admin: '<path d="M3 18h18M4 18 3 7l5 4 4-7 4 7 5-4-1 11"/>',
-    moderator: '<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/>',
+    admin: '<path fill="currentColor" fill-opacity=".18" d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>',
+    moderator: '<path fill="currentColor" fill-opacity=".18" d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
 };
 const BADGES = {
-    admin: { label: 'Admin', title: 'Administrator', cls: 'text-amber-300 bg-amber-300/10 border-amber-300/30' },
-    moderator: { label: 'Mod', title: 'Moderator', cls: 'text-sky-300 bg-sky-300/10 border-sky-300/30' },
+    admin: { title: 'Administrator', color: '#F2B84B' },
+    moderator: { title: 'Moderator', color: '#6FB1FC' },
 };
-function badgeEl(badge) {
+function badgeEl(badge, size = 16) {
     const b = BADGES[badge];
     if (!b) return null;
     return h('span', {
-        class: `inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide shrink-0 ${b.cls}`,
-        title: b.title,
-        html: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${BADGE_ICONS[badge]}</svg>${b.label}`,
+        class: 'inline-flex items-center shrink-0',
+        role: 'img', title: b.title, 'aria-label': b.title,
+        style: `color:${b.color}`,
+        html: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${BADGE_ICONS[badge]}</svg>`,
     });
 }
 function badgeHTML(badge) {
@@ -253,22 +256,31 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissOve
 
 function isStaff() { return !!currentUser && (currentUser.role === 'admin' || currentUser.role === 'moderator'); }
 
+const OID = /^[a-f\d]{24}$/i;
+
 function render(force) {
     if (!currentUser) return;
     if (!force && location.hash === renderedHash) return; // e.g. a modal closing: page underneath stays as it is
     renderedHash = location.hash;
 
-    let [tab, a, b] = currentRoute();
-    if (!['home', 'leaderboard', 'staff', 'friends', 'account', 'u'].includes(tab)) tab = 'home';
+    let [tab, a] = currentRoute();
+    if (!['home', 'leaderboard', 'staff', 'friends', 'account', 'u', 'messages'].includes(tab)) tab = 'home';
     if (tab === 'staff' && !isStaff()) tab = 'home';
-    if (tab === 'u' && !(a && /^[a-f\d]{24}$/i.test(a))) tab = 'friends';
+    if (tab === 'u' && !(a && OID.test(a))) tab = 'friends';
+    const inChat = tab === 'messages' && !!a && OID.test(a);
+
+    // A chat is a full screen: it hides the top bar and the bottom nav.
+    ['top-bar', 'scroller', 'bottom-nav'].forEach((id) => $(id).classList.toggle('hidden', inChat));
+    $('chat-screen').classList.toggle('hidden', !inChat);
+    if (!inChat) chatStop();
 
     const view = tab === 'u' ? 'profile' : tab;
-    ['home', 'leaderboard', 'staff', 'friends', 'account', 'profile'].forEach((v) =>
+    ['home', 'leaderboard', 'staff', 'friends', 'account', 'profile', 'messages'].forEach((v) =>
         $('view-' + v).classList.toggle('hidden', v !== view));
 
-    if (tab !== 'u') lastTab = tab;
-    document.querySelectorAll('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.tab === lastTab));
+    if (tab !== 'u' && tab !== 'messages') lastTab = tab;
+    document.querySelectorAll('.nav-item').forEach((n) =>
+        n.classList.toggle('active', tab !== 'messages' && n.dataset.tab === lastTab));
     scrollTo0();
 
     if (tab === 'home') renderHome();
@@ -277,6 +289,7 @@ function render(force) {
     else if (tab === 'friends') { renderFriends(); refreshFriends(); }
     else if (tab === 'account') renderAccount(a);
     else if (tab === 'u') loadPlayer(a);
+    else if (tab === 'messages') { if (inChat) openChat(a); else { renderInbox(); refreshDMs(); refreshFriends(); } }
     icons();
 }
 
@@ -299,6 +312,10 @@ function renderUser(user) {
     $('profile-display-name').textContent = name;
     // Email is intentionally NOT shown here. It lives under Login & security.
     $('profile-username').textContent = user.username;
+    const about = $('profile-about');
+    about.textContent = '';
+    const el = aboutEl(user);
+    if (el) about.append(el);
 }
 
 function saveLocalUser(user) {
@@ -414,8 +431,11 @@ function updateFriendsBadge() {
     b.textContent = n > 9 ? '9+' : String(n);
     b.classList.toggle('hidden', n === 0);
 }
-setInterval(() => { if (!document.hidden && currentUser) refreshFriends(); }, POLL_MS);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && currentUser) refreshFriends(); });
+setInterval(() => { if (!document.hidden && currentUser) { refreshFriends(); refreshDMs(); } }, POLL_MS);
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !currentUser) return;
+    refreshFriends(); refreshDMs(); pollChat();
+});
 
 const presenceText = (u) => (u.online ? 'Online' : u.lastSeenAt ? 'Last seen ' + ago(u.lastSeenAt) : 'Offline');
 
@@ -542,7 +562,13 @@ function renderFriends() {
             'No friends yet. Send a request using a username above, or tap a player on the leaderboard.'));
     } else {
         const wrap = h('div', { class: 'flex flex-col gap-2' });
-        friends.forEach((f) => wrap.append(friendRow(f, presenceText(f), h('i', { 'data-lucide': 'chevron-right', class: 'w-4 h-4 text-text-secondary shrink-0' }), () => go('u/' + f._id))));
+        friends.forEach((f) => wrap.append(friendRow(f, presenceText(f),
+            h('button', {
+                class: 'btn-press shrink-0 w-9 h-9 rounded-lg bg-pill-bg border border-border-color text-text-secondary hover:text-accent-green hover:border-accent-green/50 flex items-center justify-center transition-colors duration-150',
+                'aria-label': 'Message ' + (f.displayName || f.username),
+                onclick: (e) => { e.stopPropagation(); go('messages/' + f._id); },
+            }, h('i', { 'data-lucide': 'message-circle', class: 'w-4 h-4' })),
+            () => go('u/' + f._id))));
         box.append(wrap);
     }
 
@@ -591,6 +617,297 @@ async function sendFriendRequest() {
 $('fr-send').addEventListener('click', sendFriendRequest);
 $('fr-username').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendFriendRequest(); });
 
+
+// ── About you: bio, location, social links ───────────────────
+// Links are built here from a fixed base + the stored handle, so a stored
+// value can never become an arbitrary URL. (Website is validated by the server
+// and re-checked to be http(s) here.)
+const SOCIALS = {
+    instagram: { label: 'Instagram', url: (v) => 'https://instagram.com/' + encodeURIComponent(v) },
+    x: { label: 'X', url: (v) => 'https://x.com/' + encodeURIComponent(v) },
+    github: { label: 'GitHub', url: (v) => 'https://github.com/' + encodeURIComponent(v) },
+    youtube: { label: 'YouTube', url: (v) => 'https://youtube.com/@' + encodeURIComponent(v) },
+    twitch: { label: 'Twitch', url: (v) => 'https://twitch.tv/' + encodeURIComponent(v) },
+    discord: { label: 'Discord', url: null }, // no public profile URL: tap copies the name
+    website: { label: 'Website', url: (v) => (/^https?:\/\//i.test(v) ? v : null) },
+};
+function socialChip(key, value) {
+    const meta = SOCIALS[key];
+    const shown = key === 'website' ? value.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '') : '@' + value;
+    const cls = 'btn-press inline-flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-pill-bg border border-border-color text-xs hover:border-accent-green/50 transition-colors duration-150';
+    const inner = [h('span', { class: 'font-semibold text-text-secondary' }, meta.label), h('span', { class: 'truncate text-text-primary' }, shown)];
+    const href = meta.url ? meta.url(value) : null;
+    if (href) return h('a', { class: cls, href, target: '_blank', rel: 'noopener noreferrer nofollow' }, inner);
+    const b = h('button', { class: cls, type: 'button', title: 'Tap to copy' }, inner);
+    b.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(value); b.lastChild.textContent = 'Copied!'; setTimeout(() => { b.lastChild.textContent = shown; }, 1200); } catch (_) {}
+    });
+    return b;
+}
+// Returns an element, or null when the person has filled in nothing.
+function aboutEl(u, centered) {
+    const links = Object.entries(u.socialLinks || {}).filter(([k, v]) => v && SOCIALS[k]);
+    if (!u.bio && !u.location && !links.length) return null;
+    const box = h('div', { class: centered ? 'text-center' : '' });
+    if (u.bio) box.append(h('p', { class: 'text-sm text-text-secondary whitespace-pre-wrap break-words mt-3' }, u.bio));
+    if (u.location) box.append(h('div', { class: 'flex items-center gap-1 text-xs text-text-muted mt-2 ' + (centered ? 'justify-center' : '') },
+        h('i', { 'data-lucide': 'map-pin', class: 'w-3.5 h-3.5' }), h('span', { class: 'truncate' }, u.location)));
+    if (links.length) box.append(h('div', { class: 'flex flex-wrap gap-2 mt-3 ' + (centered ? 'justify-center' : '') }, links.map(([k, v]) => socialChip(k, v))));
+    return box;
+}
+
+
+// ── Messages (DMs) ───────────────────────────────────────────
+// Friends only. Plain polling: the inbox refreshes with the friends poll, an
+// open chat asks for newer messages every few seconds.
+let dmData = null;
+const CHAT_POLL_MS = 4000;
+
+async function refreshDMs() {
+    try {
+        dmData = await authedFetch('/api/dm');
+        const n = dmData.unread;
+        const b = $('nav-dm-badge');
+        b.textContent = n > 9 ? '9+' : String(n);
+        b.classList.toggle('hidden', n === 0);
+        const [tab, a] = currentRoute();
+        if (tab === 'messages' && !a) renderInbox();
+    } catch (_) { /* next poll retries */ }
+}
+
+const clockTime = (d) => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function dayLabel(d) {
+    const t = new Date(d), n = new Date();
+    const same = (a, b) => a.toDateString() === b.toDateString();
+    if (same(t, n)) return 'Today';
+    const y = new Date(n); y.setDate(n.getDate() - 1);
+    if (same(t, y)) return 'Yesterday';
+    return t.toLocaleDateString([], { dateStyle: 'medium' });
+}
+
+function renderInbox() {
+    const box = $('inbox-list');
+    box.textContent = '';
+    if (!dmData) { box.append(h('div', { class: 'text-sm text-text-secondary text-center py-8' }, 'Loading...')); return; }
+    const convs = dmData.conversations;
+
+    if (convs.length) {
+        const wrap = h('div', { class: 'flex flex-col gap-2' });
+        convs.forEach((c) => {
+            const u = c.user;
+            const preview = (c.last.mine ? 'You: ' : '') + c.last.text.replace(/\s+/g, ' ');
+            wrap.append(h('button', {
+                class: 'btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3 text-left hover:border-accent-green/50 transition-colors duration-150',
+                onclick: () => go('messages/' + u._id),
+            },
+                avatarEl(u, 'w-11 h-11', 'text-sm', c.isFriend ? u.online : undefined),
+                h('span', { class: 'flex-1 min-w-0' },
+                    h('span', { class: 'flex items-center justify-between gap-2' },
+                        h('span', { class: 'flex items-center gap-1.5 min-w-0' },
+                            h('span', { class: 'text-sm truncate ' + (c.unread ? 'font-bold' : 'font-semibold') }, u.displayName || u.username), badgeEl(u.badge)),
+                        h('span', { class: 'text-[11px] shrink-0 ' + (c.unread ? 'text-accent-green' : 'text-text-muted') }, ago(c.last.at))),
+                    h('span', { class: 'flex items-center justify-between gap-2 mt-0.5' },
+                        h('span', { class: 'text-xs truncate ' + (c.unread ? 'text-text-primary' : 'text-text-secondary') }, preview),
+                        c.unread ? h('span', { class: 'shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-accent-green text-app-bg text-[11px] font-bold leading-5 text-center' }, c.unread > 99 ? '99+' : String(c.unread)) : null))));
+        });
+        box.append(wrap);
+    }
+
+    const started = new Set(convs.map((c) => c.user._id));
+    const fresh = (friendsData ? friendsData.friends : []).filter((f) => !started.has(f._id));
+    if (fresh.length) {
+        box.append(sectionTitle('Start a chat'));
+        const wrap = h('div', { class: 'flex flex-col gap-2' });
+        fresh.forEach((f) => wrap.append(friendRow(f, presenceText(f), h('i', { 'data-lucide': 'message-circle', class: 'w-4 h-4 text-text-secondary shrink-0' }), () => go('messages/' + f._id))));
+        box.append(wrap);
+    }
+    if (!convs.length && !fresh.length) {
+        box.append(h('div', { class: 'bg-card-bg border border-border-color rounded-2xl p-6 text-center' },
+            h('p', { class: 'text-sm text-text-secondary mb-4' }, 'You can message your friends here. Add some friends to get started.'),
+            h('button', { class: 'btn-press bg-accent-green text-app-bg font-bold text-sm px-5 py-2.5 rounded-xl', onclick: () => go('friends') }, 'Find friends')));
+    }
+    icons();
+}
+
+// ---- Chat screen ----
+const chat = { id: null, user: null, canSend: false, messages: [], pending: [], hasMore: false, timer: null, seq: 0, chain: Promise.resolve(), polling: false };
+
+function chatStop() {
+    clearInterval(chat.timer);
+    chat.timer = null;
+    chat.seq++;
+    chat.id = null;
+}
+
+async function openChat(id) {
+    chatStop();
+    const seq = chat.seq;
+    Object.assign(chat, { id, user: null, canSend: false, messages: [], pending: [], hasMore: false, chain: Promise.resolve() });
+    $('chat-input').value = '';
+    $('chat-input').style.height = 'auto';
+    renderChatHead();
+    renderChat(true);
+    try {
+        const data = await authedFetch('/api/dm/with/' + encodeURIComponent(id));
+        if (seq !== chat.seq) return;
+        chat.user = data.user;
+        chat.canSend = data.canSend;
+        chat.messages = data.messages;
+        chat.hasMore = data.hasMore;
+        renderChatHead();
+        renderChat(true);
+        chat.timer = setInterval(pollChat, CHAT_POLL_MS);
+        refreshDMs(); // opening a chat clears its unread count
+        if (chat.canSend && matchMedia('(pointer:fine)').matches) $('chat-input').focus();
+    } catch (err) {
+        if (seq !== chat.seq) return;
+        const box = $('chat-msgs');
+        box.textContent = '';
+        box.append(h('div', { class: 'text-sm text-red-400 text-center py-10' }, err.message));
+    }
+}
+
+async function pollChat() {
+    if (!chat.id || document.hidden || chat.polling) return;
+    const seq = chat.seq;
+    chat.polling = true;
+    try {
+        const last = chat.messages.length ? chat.messages[chat.messages.length - 1]._id : null;
+        const data = await authedFetch('/api/dm/with/' + encodeURIComponent(chat.id) + (last ? '?after=' + last : ''));
+        if (seq !== chat.seq) return;
+        let changed = false;
+        data.messages.forEach((m) => {
+            if (!chat.messages.some((x) => x._id === m._id)) { chat.messages.push(m); changed = true; }
+        });
+        if (data.canSend !== chat.canSend || (chat.user && data.user.online !== chat.user.online)) changed = true;
+        chat.canSend = data.canSend;
+        chat.user = data.user;
+        renderChatHead();
+        if (changed) renderChat(false);
+    } catch (_) { /* transient */ }
+    finally { chat.polling = false; }
+}
+
+function renderChatHead() {
+    const head = $('chat-head');
+    head.textContent = '';
+    if (!chat.user) { head.append(h('span', { class: 'text-sm text-text-secondary' }, 'Loading...')); return; }
+    const u = chat.user;
+    head.append(
+        avatarEl(u, 'w-9 h-9', 'text-sm', chat.canSend ? u.online : undefined),
+        h('span', { class: 'min-w-0' },
+            h('span', { class: 'flex items-center gap-1.5 min-w-0' }, h('span', { class: 'text-sm font-bold truncate' }, u.displayName || u.username), badgeEl(u.badge)),
+            h('span', { class: 'block text-[11px] truncate ' + (chat.canSend && u.online ? 'text-accent-green' : 'text-text-muted') },
+                chat.canSend ? presenceText(u) : 'Not friends')));
+    head.onclick = () => go('u/' + u._id);
+}
+
+function bubble(text, mine, time, extra) {
+    return h('div', { class: 'flex ' + (mine ? 'justify-end' : 'justify-start') },
+        h('div', {
+            class: 'max-w-[80%] px-3.5 py-2 text-sm leading-snug ' +
+                (mine ? 'bg-accent-green text-app-bg rounded-2xl rounded-br-md' : 'bg-card-bg border border-border-color rounded-2xl rounded-bl-md') +
+                (extra && extra.failed ? ' opacity-70 ring-1 ring-red-400' : ''),
+            onclick: extra && extra.onclick,
+        },
+            h('div', { class: 'whitespace-pre-wrap break-words' }, text),
+            h('div', { class: 'text-[10px] mt-0.5 text-right ' + (mine ? 'text-app-bg/60' : 'text-text-muted') }, (extra && extra.note) || time)));
+}
+
+function renderChat(stick) {
+    const box = $('chat-msgs');
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 90;
+    box.textContent = '';
+    if (chat.hasMore) {
+        box.append(h('button', { class: 'btn-press self-center text-xs font-semibold text-text-secondary bg-pill-bg border border-border-color rounded-full px-4 py-1.5 mb-2', onclick: loadOlder }, 'Load older messages'));
+    }
+    if (chat.user && !chat.messages.length && !chat.pending.length) {
+        box.append(h('div', { class: 'text-xs text-text-muted text-center py-10' }, chat.canSend ? 'No messages yet. Say hi!' : 'No messages.'));
+    }
+    let lastDay = '';
+    chat.messages.forEach((m) => {
+        const day = new Date(m.createdAt).toDateString();
+        if (day !== lastDay) {
+            lastDay = day;
+            box.append(h('div', { class: 'text-[11px] text-text-muted text-center my-2' }, dayLabel(m.createdAt)));
+        }
+        box.append(bubble(m.text, m.sender === currentUser._id, clockTime(m.createdAt)));
+    });
+    chat.pending.forEach((p) => box.append(bubble(p.text, true, '', {
+        failed: p.failed,
+        note: p.failed ? 'Not sent · tap to retry' : 'Sending...',
+        onclick: p.failed ? () => retrySend(p) : null,
+    })));
+
+    const composer = $('chat-form'), locked = $('chat-locked');
+    composer.classList.toggle('hidden', !chat.canSend && !!chat.user);
+    locked.classList.toggle('hidden', chat.canSend || !chat.user);
+    locked.textContent = "You're no longer friends, so you can't send messages here.";
+    if (stick || nearBottom) box.scrollTop = box.scrollHeight;
+}
+
+async function loadOlder() {
+    if (!chat.messages.length) return;
+    const seq = chat.seq;
+    const box = $('chat-msgs');
+    const prevHeight = box.scrollHeight;
+    try {
+        const data = await authedFetch(`/api/dm/with/${encodeURIComponent(chat.id)}?before=${chat.messages[0]._id}`);
+        if (seq !== chat.seq) return;
+        chat.messages = data.messages.concat(chat.messages);
+        chat.hasMore = data.hasMore;
+        renderChat(false);
+        box.scrollTop = box.scrollHeight - prevHeight; // stay where you were reading
+    } catch (_) {}
+}
+
+function sendChat() {
+    const input = $('chat-input');
+    const text = input.value.trim();
+    if (!text || !chat.canSend) return;
+    input.value = '';
+    input.style.height = 'auto';
+    const p = { text, failed: false };
+    chat.pending.push(p);
+    renderChat(true);
+    queueSend(p);
+}
+function retrySend(p) {
+    p.failed = false;
+    renderChat(true);
+    queueSend(p);
+}
+// One request at a time, so messages arrive in the order they were typed.
+function queueSend(p) {
+    const seq = chat.seq;
+    chat.chain = chat.chain.then(async () => {
+        if (seq !== chat.seq) return;
+        try {
+            const data = await authedFetch('/api/dm/with/' + encodeURIComponent(chat.id), { method: 'POST', body: JSON.stringify({ text: p.text }) });
+            if (seq !== chat.seq) return;
+            chat.pending = chat.pending.filter((x) => x !== p);
+            if (!chat.messages.some((x) => x._id === data.message._id)) chat.messages.push(data.message);
+            chat.messages.sort((a, b) => (a._id < b._id ? -1 : 1));
+        } catch (err) {
+            if (seq !== chat.seq) return;
+            p.failed = true;
+            if (err.status === 403) { chat.canSend = false; chat.pending = chat.pending.filter((x) => x !== p); }
+        }
+        renderChat(true);
+    });
+}
+
+$('chat-send').addEventListener('click', () => { sendChat(); $('chat-input').focus(); });
+$('chat-input').addEventListener('input', (e) => {
+    const t = e.target;
+    t.style.height = 'auto';
+    t.style.height = Math.min(t.scrollHeight, 128) + 'px';
+});
+$('chat-input').addEventListener('keydown', (e) => {
+    // Desktop: Enter sends, Shift+Enter = new line. Phones: Enter is a new line, use the send button.
+    if (e.key === 'Enter' && !e.shiftKey && matchMedia('(pointer:fine)').matches) { e.preventDefault(); sendChat(); }
+});
+
 // ── Player profile (friend / leaderboard) ────────────────────
 let playerSeq = 0;
 async function loadPlayer(id) {
@@ -624,7 +941,9 @@ function renderPlayer(u) {
         h('div', { class: 'flex items-center justify-center gap-2 mt-4 min-w-0 max-w-full' },
             h('div', { class: 'text-xl font-bold truncate' }, name), badgeEl(u.badge)),
         h('div', { class: 'text-sm text-text-secondary' }, '@' + u.username),
-        shows ? h('div', { class: 'text-xs mt-2 font-semibold ' + (u.online ? 'text-accent-green' : 'text-text-muted') }, presenceText(u)) : null));
+        shows && u.relation !== 'self' ? h('div', { class: 'text-xs mt-2 font-semibold ' + (u.online ? 'text-accent-green' : 'text-text-muted') }, presenceText(u)) : null));
+    const about = aboutEl(u, true);
+    if (about) body.append(h('div', { class: 'mb-6' }, about));
 
     if (shows && u.stats) {
         const s = u.stats;
@@ -673,6 +992,9 @@ function renderPlayer(u) {
         dec.addEventListener('click', () => run(dec, 'DELETE', `/api/friends/requests/${u.requestId}`));
         body.append(acc, dec);
     } else if (u.relation === 'friend') {
+        const dm = h('button', { class: big + 'bg-accent-green text-app-bg mb-2 shadow-[0_0_15px_rgba(163,230,53,0.25)]' }, 'Message');
+        dm.addEventListener('click', () => go('messages/' + u._id));
+        body.append(dm);
         const b = h('button', { class: big + 'bg-pill-bg border border-border-color text-red-400' }, 'Remove friend');
         armButton(b, 'Tap again to remove', () => run(b, 'DELETE', '/api/friends/' + u._id));
         body.append(b);
@@ -716,7 +1038,12 @@ const CATEGORIES = [
 ];
 
 function renderProfileMenu() {
-    $('profile-menu').innerHTML = CATEGORIES.map(c => `
+    $('profile-menu').innerHTML = `
+        <button onclick="go('u/' + currentUser._id)" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left hover:border-accent-green/50 transition-colors duration-150">
+            <span class="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0"><i data-lucide="id-card" class="w-4 h-4 text-text-secondary"></i></span>
+            <span class="flex-1 min-w-0"><span class="block text-sm font-semibold">My profile</span><span class="block text-xs text-text-secondary truncate">See how others see you</span></span>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-text-secondary flex-shrink-0"></i>
+        </button>` + CATEGORIES.map(c => `
         <button onclick="go('account/${c.id}')" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left hover:border-accent-green/50 transition-colors duration-150">
             <span class="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
                 <i data-lucide="${c.icon}" class="w-4 h-4 text-text-secondary"></i>
@@ -738,7 +1065,7 @@ function renderAccount(sub) {
         $('acct-root').classList.add('hidden');
         $('acct-sub').classList.remove('hidden');
         const body = $('profile-body');
-        if (sub === 'personalize') { body.innerHTML = buildPersonalizeHTML(); refreshPzPreview(); }
+        if (sub === 'personalize') { body.innerHTML = buildPersonalizeHTML(); refreshPzPreview(); wireAbout(); }
         else { body.innerHTML = buildAccountHTML(); fillAccountEmail(); }
     } else {
         $('acct-sub').classList.add('hidden');
@@ -791,6 +1118,8 @@ function buildPersonalizeHTML() {
             Save name
         </button>
     </div>
+
+    ${buildAboutHTML()}
 
     ${buildUsernameHTML()}`;
 }
@@ -1037,6 +1366,75 @@ async function savePersonalize() {
     }
 }
 
+
+// ── About you (bio, location, links) ─────────────────────────
+const SOCIAL_FIELDS = [
+    ['instagram', 'Instagram', 'username'], ['x', 'X', 'username'], ['github', 'GitHub', 'username'],
+    ['youtube', 'YouTube', 'handle'], ['twitch', 'Twitch', 'username'], ['discord', 'Discord', 'username'],
+    ['website', 'Website', 'yoursite.com'],
+];
+function buildAboutHTML() {
+    const links = currentUser.socialLinks || {};
+    return `
+    <div class="bg-card-bg border border-border-color rounded-2xl p-4 mb-4">
+        <div class="text-sm font-semibold mb-1">About you</div>
+        <p class="text-xs text-text-secondary mb-4">Shown on your public profile. Everything here is optional.</p>
+
+        <label class="text-xs text-text-secondary block mb-1">Bio</label>
+        <textarea id="ab-bio" rows="3" maxlength="160" class="field w-full rounded-lg px-3 py-2.5 text-sm resize-none" placeholder="Tell people a bit about yourself">${escapeHtml(currentUser.bio || '')}</textarea>
+        <p id="ab-count" class="text-[11px] text-text-muted text-right mt-1 mb-3"></p>
+
+        <label class="text-xs text-text-secondary block mb-1">Location</label>
+        <input id="ab-location" maxlength="30" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-4" placeholder="City, country" value="${escapeHtml(currentUser.location || '')}">
+
+        <div class="text-xs text-text-secondary mb-2">Links</div>
+        <div class="flex flex-col gap-2 mb-3">
+            ${SOCIAL_FIELDS.map(([k, label, ph]) => `
+            <div class="flex items-center gap-2">
+                <span class="w-20 shrink-0 text-xs text-text-secondary">${label}</span>
+                <input id="ab-${k}" maxlength="100" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${ph}"
+                    class="field flex-1 min-w-0 rounded-lg px-3 py-2 text-sm" value="${escapeHtml(links[k] || '')}">
+            </div>`).join('')}
+        </div>
+        <div id="ab-error" class="hidden text-xs mb-3"></div>
+        <button onclick="saveAbout()" id="ab-save-btn"
+            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+            Save
+        </button>
+    </div>`;
+}
+function wireAbout() {
+    const bio = $('ab-bio');
+    if (!bio) return;
+    const upd = () => { $('ab-count').textContent = bio.value.length + ' / 160'; };
+    bio.addEventListener('input', upd);
+    upd();
+}
+async function saveAbout() {
+    hideMsg('ab-error');
+    const socialLinks = {};
+    SOCIAL_FIELDS.forEach(([k]) => { socialLinks[k] = $('ab-' + k).value.trim(); });
+    setBusy('ab-save-btn', true, 'Save', 'Saving...');
+    try {
+        const data = await authedFetch('/api/auth/profile', {
+            method: 'PATCH',
+            body: JSON.stringify({ bio: $('ab-bio').value, location: $('ab-location').value, socialLinks }),
+        });
+        renderUser(data.user);
+        saveLocalUser(data.user);
+        // show what the server actually kept (e.g. a pasted link reduced to a username)
+        SOCIAL_FIELDS.forEach(([k]) => { $('ab-' + k).value = (data.user.socialLinks && data.user.socialLinks[k]) || ''; });
+        $('ab-bio').value = data.user.bio || '';
+        wireAbout();
+        icons();
+        showMsg('ab-error', 'Saved.', 'ok');
+    } catch (err) {
+        showMsg('ab-error', err.message, 'error');
+    } finally {
+        setBusy('ab-save-btn', false, 'Save', 'Saving...');
+    }
+}
+
 // ── Username change (card inside Personalize) ────────────────
 // No password field here: it is asked in a pop-up when you tap Update.
 let unSeq = 0;
@@ -1275,6 +1673,7 @@ async function savePassword() {
         $('splash').classList.add('hidden');
         render(true);
         refreshFriends();
+        refreshDMs();
         icons();
     } catch (err) {
         console.error(err);
