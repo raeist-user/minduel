@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const {
   register,
+  checkAvailability,
   login,
   getMe,
   updateProfile,
@@ -37,6 +38,18 @@ const forgotPasswordLimiter = rateLimit({
   message: { message: 'Too many reset requests. Please try again later.' },
 });
 
+// Live "is this username/email taken?" checks fire as the user types, so this
+// needs a much more generous limit than register. It's still limited so it
+// can't be used to scrape the full list of registered usernames/emails.
+const availabilityLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  message: { message: 'Too many checks. Slow down for a moment.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.get('/check-availability', availabilityLimiter, checkAvailability);
 router.post('/register', registerLimiter, register);
 router.post('/login', loginLimiter, login);
 router.get('/me', protect, getMe);

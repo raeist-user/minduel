@@ -17,10 +17,12 @@ const userSchema = new mongoose.Schema(
     username: {
       type: String,
       required: [true, 'Username is required'],
-      unique: true,
       trim: true,
       minlength: 3,
       maxlength: 20,
+      // NOTE: uniqueness is enforced by the case-insensitive index declared
+      // below the schema, not by `unique: true` here (that would be
+      // case-sensitive, letting "Neo" and "neo" both register).
     },
     email: {
       type: String,
@@ -89,6 +91,15 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Case-insensitive unique username. strength:2 makes "Neo", "neo" and "NEO"
+// collide, so the database itself rejects duplicates even when two signups
+// race past the application-level check.
+//
+// If you already have users in production, Mongo will refuse to build this
+// index while case-variant duplicates exist. Check first with:
+//   db.users.aggregate([{ $group: { _id: { $toLower: "$username" }, n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])
+userSchema.index({ username: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
 
 // Hash password before saving
 userSchema.pre('save', async function (next) {
