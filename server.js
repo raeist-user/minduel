@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const mongoose = require('mongoose');
 const connectDB = require('./src/db');
 const authRoutes = require('./src/authRoutes');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
@@ -36,6 +37,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 // --- Health check (useful for Render) ---
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', time: new Date().toISOString() });
+});
+
+// Fail fast with a clear message if the DB isn't connected yet, instead of
+// letting requests hang until Mongoose's internal buffering timeout
+app.use('/api', (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ message: 'Database is not connected yet, please try again shortly' });
+  }
+  next();
 });
 
 // --- Routes ---
