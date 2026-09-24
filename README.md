@@ -24,6 +24,9 @@ src/userRoutes.js              # /api/users/leaderboard, /api/users/:id
 src/Friendship.js              # one document per pair: pending | accepted
 src/friendController.js        # friend list (+ online state), send/accept/decline/cancel/unfriend
 src/friendRoutes.js            # /api/friends/*
+src/profileFields.js           # validation for bio, location, social links (handles, not free URLs)
+src/Conversation.js, Message.js # DMs: one conversation per pair (inbox preview + unread), messages
+src/dmController.js, dmRoutes.js # /api/dm/*
 src/authCore.js                # the ONE place that decides if a token may get in (HTTP + Socket.io both use it)
 src/socketAuth.js              # Socket.io handshake auth + kickUser(), ready for live matches
 scripts/set-role.js            # npm run set-role -- <username|email> <player|moderator|admin>
@@ -256,6 +259,17 @@ to the right place (e.g. `https://minduel.onrender.com`).
 | DELETE | `/api/friends/:userId` | unfriend |
 
 Online = the server heard from the account in the last 2 minutes (`lastSeenAt`, written by `protect`, at most every 30 s). Only ever shown to accepted friends.
+
+### Messages (friends only, all need a Bearer token)
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/dm` | Inbox: conversations (newest first), unread counts, total `unread`. |
+| GET | `/api/dm/with/:userId` | Latest 50 messages and marks the chat read. `?after=<id>` = only newer (polling), `?before=<id>` = older page. Returns `canSend` (false once you are no longer friends; history stays readable). |
+| POST | `/api/dm/with/:userId` | `{ text }`, 1-1000 chars, friends only, 30/min. |
+
+Delivery is polling (open chat every 4 s, inbox every 45 s). Swapping in Socket.IO later only changes how new messages arrive; the endpoints stay.
+
+Profile fields: `PATCH /api/auth/profile` accepts `bio` (160), `location` (30) and `socialLinks` (`instagram, x, github, youtube, twitch, discord, website`). Links are stored as handles and the URL is built client-side from a fixed base.
 
 ### Players
 | GET | `/api/users/leaderboard` | Bearer token | Top 50 by rating + your rank. |
