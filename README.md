@@ -19,8 +19,11 @@ src/moderation.js              # pure rules: roles, rank checks, badges, ban/sus
 src/ModerationLog.js           # append-only record of every staff action
 src/adminController.js         # staff: search accounts, ban, suspend, restore, set role, activity log
 src/adminRoutes.js             # /api/admin/* (staff only) + rate limiters
-src/userController.js          # public player profile (allowlist view only)
-src/userRoutes.js              # /api/users/:id
+src/userController.js          # leaderboard + player profile (allowlist view; friends also get stats/online)
+src/userRoutes.js              # /api/users/leaderboard, /api/users/:id
+src/Friendship.js              # one document per pair: pending | accepted
+src/friendController.js        # friend list (+ online state), send/accept/decline/cancel/unfriend
+src/friendRoutes.js            # /api/friends/*
 src/authCore.js                # the ONE place that decides if a token may get in (HTTP + Socket.io both use it)
 src/socketAuth.js              # Socket.io handshake auth + kickUser(), ready for live matches
 scripts/set-role.js            # npm run set-role -- <username|email> <player|moderator|admin>
@@ -32,8 +35,10 @@ src/errorMiddleware.js          # centralized error handling (now logs to consol
 public/index.html               # login / register
 public/forgot-password.html     # request a reset email
 public/reset-password.html      # set new password from emailed link
-public/home.html                # nav bar, profile dropdown, personalization + account settings, staff badge
-public/admin.html               # staff panel: search accounts, ban/suspend, choose moderators, activity log
+public/home.html                # app shell: top bar + bottom nav (Home, Ranks, Staff*, Friends, Account)
+public/app.js                  # router (real history entries so phone Back works in-app), tabs, friends, account, password pop-up
+public/staff.js                # staff panel (moderators/admins), shown in the Staff tab
+public/admin.html               # old URL: just redirects to /home.html#/staff
 public/terms.html               # DRAFT Terms of Service (have it reviewed before launch)
 public/privacy.html             # DRAFT Privacy Policy (have it reviewed before launch)
 ```
@@ -85,7 +90,7 @@ public/privacy.html             # DRAFT Privacy Policy (have it reviewed before 
   wording in `index.html`, `home.html`, `terms.html` if you need 16.
 
 ## Account changes (username / email / password)
-- All three require the current password. Wrong guesses count toward the same
+- All three require the current password, asked in a pop-up when the person taps the final button (not as a form field). A wrong password keeps the pop-up open for another try. Wrong guesses count toward the same
   per-account lockout as login (5 failures -> locked 15 min), so a stolen
   session token can't be used to brute-force the password through these routes.
 - Usernames can change once per 14 days. Old names are kept (last 10, hidden)
@@ -241,10 +246,22 @@ to the right place (e.g. `https://minduel.onrender.com`).
 | POST | `/api/auth/forgot-password` | — | `{ email }` → sends reset email |
 | POST | `/api/auth/reset-password` | — | `{ token, password }` |
 
+### Friends (all need a Bearer token)
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/friends` | `{ friends (with online, lastSeenAt), incoming, outgoing }`. The app polls this every 45 s, which is also its presence heartbeat. |
+| POST | `/api/friends/request` | `{ username }` or `{ userId }`. If they already asked you, this accepts it. 40/hour. |
+| POST | `/api/friends/requests/:id/accept` | recipient only |
+| DELETE | `/api/friends/requests/:id` | decline (recipient) or cancel (sender) |
+| DELETE | `/api/friends/:userId` | unfriend |
+
+Online = the server heard from the account in the last 2 minutes (`lastSeenAt`, written by `protect`, at most every 30 s). Only ever shown to accepted friends.
+
 ### Players
+| GET | `/api/users/leaderboard` | Bearer token | Top 50 by rating + your rank. |
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/api/users/:id` | Bearer token | Public profile (`_id, username, displayName, avatarUrl, rating, badge`). 404 if the account is missing or banned. |
+| GET | `/api/users/:id` | Bearer token | Public profile + `relation` (`self/friend/incoming/outgoing/none`). Friends and yourself also get `stats`, `online`, `lastSeenAt`. 404 if missing or banned. |
 
 ### Admin (staff only; role is read from the database)
 | Method | Path | Who | Notes |
