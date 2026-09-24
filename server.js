@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const connectDB = require('./src/db');
 const authRoutes = require('./src/authRoutes');
+const { verifyEmailSetup } = require('./src/emailService');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
 
 const app = express();
@@ -73,6 +74,9 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Minduel backend running on port ${PORT}`);
+  // Report email status in the logs right away so a misconfigured SMTP
+  // setup is obvious at deploy time, not when a user first needs a reset.
+  verifyEmailSetup();
 });
 
 // Surface anything that would otherwise crash the process silently

@@ -15,7 +15,7 @@ Minduel. Matchmaking, questions, and real-time gameplay come next.
 server.js                      # entry point
 src/db.js                      # Mongo connection (auto-retries, never crashes the process)
 src/User.js                    # user schema: profile, rating/stats, reset-token, lockout fields
-src/emailService.js            # sends password-reset emails (or logs the link if SMTP isn't set)
+src/emailService.js            # sends password-reset emails, verifies SMTP at boot (logs the link if SMTP isn't set in dev)
 src/authController.js          # register, login, me, profile, password, forgot/reset password
 src/authRoutes.js               # routes + rate limiters
 src/authMiddleware.js           # protect / adminOnly
@@ -44,7 +44,12 @@ public/home.html                # nav bar, profile dropdown, personalization + a
   locked for 15 minutes regardless of IP (stops distributed/credential-stuffing
   attempts against a single account).
 - **Generic auth errors**: login and forgot-password never reveal whether an
-  email/username exists, to prevent user enumeration.
+  email/username exists, to prevent user enumeration. (Registration is the
+  deliberate exception: it has to tell you a username is taken. That's why the
+  live check below is rate-limited.)
+- **Case-insensitive usernames**: `Neo`, `neo` and `NEO` are the same name,
+  enforced by a collation index in MongoDB (not just in app code), so two
+  simultaneous signups can't both win.
 - **Helmet**: standard security headers (X-Frame-Options, etc). CSP is
   currently disabled because the frontend loads Tailwind/fonts/icons from
   CDNs with inline scripts — tighten this once the frontend is bundled.
@@ -54,6 +59,16 @@ public/home.html                # nav bar, profile dropdown, personalization + a
   stored in the DB, expires after 1 hour, single-use.
 
 ## Email (password reset)
+
+**Why reset emails might not arrive:** if `SMTP_HOST`, `SMTP_USER` and `SMTP_PASS`
+aren't all set, nothing is emailed. The link is only printed to the server
+log. In `NODE_ENV=production` the API now returns a 503 in that case instead of
+pretending it was sent. On startup the server logs one of:
+- `[email] SMTP connection OK` — you're good.
+- `[email] SMTP is NOT configured` — set the three variables.
+- `[email] SMTP is configured but the connection/login FAILED` — wrong
+  host/port/credentials (for Gmail you must use an App Password).
+
 Forgot-password actually sends an email via Nodemailer over SMTP. Two ways
 to get SMTP credentials:
 - **Fastest for testing**: a Gmail account with an
@@ -76,7 +91,8 @@ to the right place (e.g. `https://minduel.onrender.com`).
 ### Auth
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | `{ username, email, password }` |
+| GET | `/api/auth/check-availability` | — | `?username=` and/or `?email=` → `{ username: { valid, available, message }, email: {...} }`. 30 req/min per IP. |
+| POST | `/api/auth/register` | — | `{ username, email, password }`. Username: 3-20 chars, letters/numbers/underscore. 409 responses include `field` (`username` or `email`). |
 | POST | `/api/auth/login` | — | `{ emailOrUsername, password }` |
 | GET | `/api/auth/me` | Bearer token | current user |
 | PATCH | `/api/auth/profile` | Bearer token | `{ displayName?, avatarColor? }` |
