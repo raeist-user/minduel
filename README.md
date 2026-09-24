@@ -58,8 +58,20 @@ public/home.html                # nav bar, profile dropdown, personalization + a
 - **Password reset tokens**: random 32-byte token, only its SHA-256 hash is
   stored in the DB, expires after 1 hour, single-use.
 
+## Account changes (username / email / password)
+- All three require the current password. Wrong guesses count toward the same
+  per-account lockout as login (5 failures -> locked 15 min), so a stolen
+  session token can't be used to brute-force the password through these routes.
+- Usernames can change once per 14 days. Old names are kept (last 10, hidden)
+  so support can trace who used a name, and a name can't be sniped instantly.
+- Email is never returned by `toPublicObject()`; anything shown to *other*
+  players (opponent card, leaderboard, match history) must use that projection,
+  never `toSafeObject()`. The email is also not stored in the browser's
+  localStorage.
+
 ## Profile pictures
-- The browser crops the chosen photo to a centered square, resizes it to 256x256
+- The user picks the region (drag + zoom/pinch in a circular preview); the
+  browser then crops it to a square, resizes it to 256x256
   and re-encodes it as JPEG (about 15-45 KB), which also strips EXIF/GPS data. The
   server never receives the original.
 - The server re-checks the file's leading bytes (JPEG/PNG/WebP only; SVG and
@@ -113,7 +125,9 @@ to the right place (e.g. `https://minduel.onrender.com`).
 | PUT | `/api/auth/avatar` | Bearer token | Body is the **raw image bytes** (`Content-Type: image/jpeg`, `image/png` or `image/webp`), max 150 KB. Verified by file header, not by the header/extension. 20 uploads/hour per IP. Returns `{ user }`. |
 | DELETE | `/api/auth/avatar` | Bearer token | Removes the profile picture. Returns `{ user }`. |
 | GET | `/api/auth/avatar/:id` | — | Serves a user's picture (public, cached 24h). 404 if none. |
-| PATCH | `/api/auth/password` | Bearer token | `{ currentPassword, newPassword }` |
+| PATCH | `/api/auth/username` | Bearer token | `{ newUsername, password }`. Password required. 14-day cooldown (case-only changes exempt). 409 if taken, 429 during cooldown. |
+| PATCH | `/api/auth/email` | Bearer token | `{ newEmail, password }`. Password required. 409 if taken. *(Will also require an emailed code once email verification exists.)* |
+| PATCH | `/api/auth/password` | Bearer token | `{ currentPassword, newPassword }`. New password must differ from the current one. |
 | POST | `/api/auth/forgot-password` | — | `{ email }` → sends reset email |
 | POST | `/api/auth/reset-password` | — | `{ token, password }` |
 
