@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0D0D0D">
+<meta name="theme-color" content="#171717">
 <title>Minduel — Home</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
@@ -14,9 +14,16 @@
             extend: {
                 fontFamily: { sans: ['Space Grotesk', 'sans-serif'] },
                 colors: {
-                    'app-bg': '#0D0D0D', 'card-bg': '#1A1A1A',
-                    'accent-green': '#A3E635', 'text-primary': '#FFFFFF',
-                    'text-secondary': '#888888', 'border-color': '#2A2A2A'
+                    // Lighter, Matiks-style dark theme. The accent green is unchanged.
+                    'app-bg': '#171717',        // page
+                    'card-bg': '#252525',       // cards, tiles
+                    'pill-bg': '#292929',       // small chips / pills
+                    'input-bg': '#1E1E1E',      // inputs sit slightly darker than the card they're on
+                    'accent-green': '#A3E635',
+                    'text-primary': '#FFFFFF',
+                    'text-secondary': '#A2A2A2',
+                    'text-muted': '#747474',
+                    'border-color': '#3A3A3A'
                 }
             }
         }
@@ -24,44 +31,64 @@
 </script>
 <style>
     html { height: 100%; overscroll-behavior: none; }
-    body { background-color: #0D0D0D; color: #FFFFFF; font-family: 'Space Grotesk', sans-serif; margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+    body { background-color: #171717; color: #FFFFFF; font-family: 'Space Grotesk', sans-serif; margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
     ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #121212; }
-    ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: #171717; }
+    ::-webkit-scrollbar-thumb { background: #3A3A3A; border-radius: 4px; }
     .btn-press:active { transform: scale(.97); }
-    /* The one fixed avatar look: brand green with dark initial. Used only
-       when the user has no profile picture. */
-    .avatar { background-color: #A3E635; color: #0D0D0D; }
-    .avatar.has-photo { background-color: #1A1A1A; }
+    /* One fixed avatar look: brand green + dark initial, used only when the
+       user has no profile picture. */
+    .avatar { background-color: #A3E635; color: #171717; }
+    .avatar.has-photo { background-color: #252525; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .dropdown { display: none; }
     .dropdown.open { display: block; }
+    .field { background: #1E1E1E; border: 1px solid #3A3A3A; }
+    .field:focus { outline: none; border-color: #A3E635; box-shadow: 0 0 0 1px #A3E635; }
+    .field.bad { border-color: #F87171; box-shadow: none; }
+    .field.good { border-color: #A3E635; }
+    .field:disabled { opacity: .5; }
+    /* Crop stage: image is positioned by JS; the circle is the visible crop area. */
+    #crop-stage { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+    #crop-stage:active { cursor: grabbing; }
+    #crop-img { position: absolute; top: 0; left: 0; transform-origin: 0 0; max-width: none; pointer-events: none; }
+    #crop-ring { position: absolute; inset: 0; border-radius: 9999px; box-shadow: 0 0 0 999px rgba(23,23,23,.72); border: 2px solid #A3E635; pointer-events: none; }
+    input[type=range].zoom { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #3A3A3A; outline: none; }
+    input[type=range].zoom::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #A3E635; cursor: pointer; }
+    input[type=range].zoom::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #A3E635; cursor: pointer; }
 </style>
 </head>
 <body>
 <div class="h-full flex flex-col overflow-hidden">
 
     <!-- NAV -->
-    <nav class="z-50 flex-shrink-0 flex items-center justify-between px-5 h-[58px] bg-app-bg/90 backdrop-blur-md border-b border-border-color">
+    <nav class="z-50 flex-shrink-0 flex items-center justify-between px-5 h-[58px] bg-app-bg border-b border-border-color">
         <div class="flex items-center gap-2">
             <div class="w-6 h-6 rounded bg-card-bg flex items-center justify-center border border-border-color">
                 <div class="w-3 h-3 bg-accent-green rounded-sm transform rotate-45"></div>
             </div>
             <span class="text-base font-semibold tracking-tight">Minduel</span>
         </div>
-        <div class="relative">
-            <button id="profile-btn" onclick="toggleDropdown()" class="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border border-border-color bg-card-bg hover:border-accent-green/50 transition-colors duration-150">
-                <span id="nav-avatar" class="avatar w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold flex-shrink-0">?</span>
-                <span id="nav-name" class="text-sm font-semibold">...</span>
-            </button>
-            <div id="dropdown" class="dropdown absolute right-0 top-[calc(100%+8px)] w-52 bg-card-bg border border-border-color rounded-xl overflow-hidden">
-                <button onclick="openProfile()" class="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm font-medium hover:bg-white/5 transition-colors duration-150">
-                    <i data-lucide="user" class="w-4 h-4 text-text-secondary shrink-0"></i>Profile
+
+        <!-- profile + rating, rating sits to the right of the profile -->
+        <div class="flex items-center gap-2">
+            <div class="relative">
+                <button id="profile-btn" onclick="toggleDropdown()" class="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border border-border-color bg-pill-bg hover:border-accent-green/50 transition-colors duration-150">
+                    <span id="nav-avatar" class="avatar w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold flex-shrink-0">?</span>
+                    <span id="nav-name" class="text-sm font-semibold max-w-[110px] truncate">...</span>
                 </button>
-                <div class="h-px bg-border-color"></div>
-                <button onclick="logout()" class="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm font-medium text-red-400 hover:bg-white/5 transition-colors duration-150">
-                    <i data-lucide="log-out" class="w-4 h-4 shrink-0"></i>Log out
-                </button>
+                <div id="dropdown" class="dropdown absolute right-0 top-[calc(100%+8px)] w-52 bg-card-bg border border-border-color rounded-xl overflow-hidden shadow-xl">
+                    <button onclick="openProfile()" class="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm font-medium hover:bg-white/5 transition-colors duration-150">
+                        <i data-lucide="user" class="w-4 h-4 text-text-secondary shrink-0"></i>Profile
+                    </button>
+                    <div class="h-px bg-border-color"></div>
+                    <button onclick="logout()" class="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm font-medium text-red-400 hover:bg-white/5 transition-colors duration-150">
+                        <i data-lucide="log-out" class="w-4 h-4 shrink-0"></i>Log out
+                    </button>
+                </div>
+            </div>
+            <div id="nav-rating" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border-color bg-pill-bg text-sm font-bold whitespace-nowrap" title="Your rating">
+                <span id="nav-rating-num" class="text-accent-green">1000</span><span class="text-text-secondary font-semibold">pts</span>
             </div>
         </div>
     </nav>
@@ -73,7 +100,7 @@
         <div id="section-home">
             <h1 class="text-4xl font-bold tracking-tight mb-1">Home</h1>
             <p class="text-text-secondary mb-8">Welcome, <span id="welcome-name">...</span></p>
-            <div class="bg-card-bg border border-border-color rounded-xl p-6 text-center">
+            <div class="bg-card-bg border border-border-color rounded-2xl p-6 text-center">
                 <i data-lucide="hammer" class="w-6 h-6 text-text-secondary mx-auto mb-3"></i>
                 <p class="text-sm text-text-secondary">Matchmaking and the game screen are coming next. Your account is ready to go.</p>
             </div>
@@ -89,7 +116,15 @@
                 <div id="profile-avatar-big" class="avatar w-16 h-16 rounded-full overflow-hidden flex items-center justify-center text-xl font-bold flex-shrink-0">?</div>
                 <div class="min-w-0">
                     <div id="profile-display-name" class="text-lg font-bold truncate">...</div>
-                    <div class="text-xs text-text-secondary truncate"><span id="profile-email">...</span> · @<span id="profile-username">...</span></div>
+                    <!-- Username only (no email) + copy button -->
+                    <div class="flex items-center gap-1.5 text-xs text-text-secondary min-w-0">
+                        <span class="truncate">@<span id="profile-username">...</span></span>
+                        <button id="copy-username-btn" onclick="copyUsername()" aria-label="Copy username" title="Copy username"
+                            class="btn-press shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-text-secondary hover:text-accent-green hover:bg-white/5 transition-colors duration-150">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <span id="copy-feedback" class="hidden text-accent-green font-semibold">Copied!</span>
+                    </div>
                     <div class="text-xs text-accent-green mt-0.5" id="profile-rating"></div>
                 </div>
             </div>
@@ -105,11 +140,47 @@
     </main>
 </div>
 
+<!-- CROP MODAL: the user chooses which part of the photo becomes the avatar -->
+<div id="crop-modal" class="hidden fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-5">
+    <div class="w-full max-w-[380px] bg-card-bg border border-border-color rounded-2xl p-5">
+        <div class="text-base font-bold mb-1">Adjust your photo</div>
+        <p class="text-xs text-text-secondary mb-4">Drag to move. Use the slider to zoom. The circle is what others will see.</p>
+
+        <div class="relative mx-auto mb-4" style="width:280px;height:280px;">
+            <div id="crop-stage" class="relative w-full h-full overflow-hidden rounded-full bg-black">
+                <img id="crop-img" alt="">
+            </div>
+            <div id="crop-ring"></div>
+        </div>
+
+        <div class="flex items-center gap-3 mb-5 px-1">
+            <i data-lucide="image" class="w-3.5 h-3.5 text-text-secondary shrink-0"></i>
+            <input id="crop-zoom" type="range" class="zoom flex-1" min="0" max="100" value="0" aria-label="Zoom">
+            <i data-lucide="image" class="w-5 h-5 text-text-secondary shrink-0"></i>
+        </div>
+
+        <div id="crop-error" class="hidden text-xs text-red-400 mb-3"></div>
+        <div class="flex gap-2">
+            <button onclick="cancelCrop()" id="crop-cancel" class="btn-press flex-1 py-3 rounded-xl text-sm font-semibold bg-pill-bg border border-border-color hover:border-white/30 transition-colors duration-150">Cancel</button>
+            <button onclick="confirmCrop()" id="crop-save" class="btn-press flex-1 py-3 rounded-xl text-sm font-bold bg-accent-green text-app-bg shadow-[0_0_15px_rgba(163,230,53,0.25)]">Use photo</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const token = localStorage.getItem('minduel_token');
     if (!token) window.location.href = '/index.html';
 
     let currentUser = null;
+
+    const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
+    const EMAIL_RE = /^\S+@\S+\.\S+$/;
+
+    function sessionExpired() {
+        localStorage.removeItem('minduel_token');
+        localStorage.removeItem('minduel_user');
+        window.location.href = '/index.html';
+    }
 
     async function authedFetch(url, options = {}) {
         const res = await fetch(url, {
@@ -120,20 +191,25 @@
                 ...(options.headers || {}),
             },
         });
-        if (res.status === 401) {
-            localStorage.removeItem('minduel_token');
-            localStorage.removeItem('minduel_user');
-            window.location.href = '/index.html';
+        // A wrong-password 401 from a sensitive action must NOT log the user out;
+        // only an expired/invalid session does. The server marks password errors with `field`.
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        if (res.status === 401 && data.field !== 'password' && !/password is incorrect/i.test(data.message || '')) {
+            sessionExpired();
             throw new Error('Session expired');
         }
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Request failed');
+        if (!res.ok) {
+            const err = new Error(data.message || 'Request failed');
+            err.field = data.field;
+            err.status = res.status;
+            throw err;
+        }
         return data;
     }
 
     // Photo if the user has one, otherwise their initial on the fixed brand color.
-    // textContent / DOM APIs only (never innerHTML) so a display name or URL
-    // can't inject markup.
+    // DOM APIs only (never innerHTML), so names/URLs can't inject markup.
     function setAvatar(el, user) {
         const name = user.displayName || user.username;
         el.textContent = '';
@@ -141,7 +217,7 @@
             const img = document.createElement('img');
             img.alt = '';
             img.draggable = false;
-            img.onerror = () => { // broken/missing image -> fall back to initial
+            img.onerror = () => {
                 el.classList.remove('has-photo');
                 el.textContent = name.charAt(0).toUpperCase();
             };
@@ -160,20 +236,27 @@
 
         setAvatar(document.getElementById('nav-avatar'), user);
         document.getElementById('nav-name').textContent = name;
+        document.getElementById('nav-rating-num').textContent = user.rating;
         document.getElementById('welcome-name').textContent = name;
 
         setAvatar(document.getElementById('profile-avatar-big'), user);
         document.getElementById('profile-display-name').textContent = name;
-        document.getElementById('profile-email').textContent = user.email;
+        // Email is intentionally NOT shown here. It lives under Account.
         document.getElementById('profile-username').textContent = user.username;
-        document.getElementById('profile-rating').textContent = `Rating: ${user.rating}`;
+        document.getElementById('profile-rating').textContent = `${user.rating} pts`;
+    }
+
+    function saveLocalUser(user) {
+        // Never keep the email in localStorage: it's not needed on this device between visits.
+        const { email, ...rest } = user;
+        localStorage.setItem('minduel_user', JSON.stringify(rest));
     }
 
     (async function init() {
         try {
             const data = await authedFetch('/api/auth/me');
             renderUser(data.user);
-            localStorage.setItem('minduel_user', JSON.stringify(data.user));
+            saveLocalUser(data.user);
             lucide.createIcons();
         } catch (err) {
             console.error(err);
@@ -203,14 +286,45 @@
         document.getElementById('section-home').classList.remove('hidden');
     }
 
+    // ── Copy username ────────────────────────────────────────
+    let copyTimer = null;
+    async function copyUsername() {
+        const text = currentUser ? currentUser.username : '';
+        if (!text) return;
+        let copied = false;
+        try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+        } catch (_) {
+            // Fallback for browsers/contexts without the async clipboard API
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                copied = document.execCommand('copy');
+                document.body.removeChild(ta);
+            } catch (__) { copied = false; }
+        }
+        const fb = document.getElementById('copy-feedback');
+        fb.textContent = copied ? 'Copied!' : 'Copy failed';
+        fb.className = 'text-xs font-semibold ' + (copied ? 'text-accent-green' : 'text-red-400');
+        clearTimeout(copyTimer);
+        copyTimer = setTimeout(() => fb.classList.add('hidden'), 1500);
+    }
+
     const CATEGORIES = [
-        { id: 'personalize', icon: 'palette', label: 'Personalize', desc: 'Display name & profile picture' },
-        { id: 'account', icon: 'lock', label: 'Account', desc: 'Change password' },
+        { id: 'personalize', icon: 'palette', label: 'Personalize', desc: 'Profile picture & display name' },
+        { id: 'username', icon: 'at-sign', label: 'Username', desc: 'Change your @username' },
+        { id: 'account', icon: 'lock', label: 'Account', desc: 'Email & password' },
     ];
 
     function renderProfileMenu() {
         document.getElementById('profile-menu').innerHTML = CATEGORIES.map(c => `
-            <button onclick="openCategory('${c.id}')" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-xl px-4 py-3.5 text-left hover:border-accent-green/50 transition-colors duration-150">
+            <button onclick="openCategory('${c.id}')" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left hover:border-accent-green/50 transition-colors duration-150">
                 <span class="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
                     <i data-lucide="${c.icon}" class="w-4 h-4 text-text-secondary"></i>
                 </span>
@@ -228,7 +342,8 @@
         document.getElementById('profile-content').classList.remove('hidden');
         const body = document.getElementById('profile-body');
         if (cat === 'personalize') { body.innerHTML = buildPersonalizeHTML(); refreshPzPreview(); }
-        else body.innerHTML = buildAccountHTML();
+        else if (cat === 'username') { body.innerHTML = buildUsernameHTML(); }
+        else { body.innerHTML = buildAccountHTML(); fillAccountEmail(); }
         lucide.createIcons();
     }
     function closeCategory() {
@@ -236,20 +351,44 @@
         document.getElementById('profile-menu').classList.remove('hidden');
     }
 
-    // ── Personalize ──────────────────────────────────────────
-    const AVATAR_SIZE = 256;            // output is a 256x256 square
-    const MAX_SOURCE_BYTES = 10 * 1024 * 1024; // refuse absurdly large originals up front
+    // ── Small shared helpers for the forms ───────────────────
+    function showMsg(id, text, kind) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text;
+        el.className = 'text-xs mb-3 ' + (kind === 'ok' ? 'text-accent-green' : 'text-red-400');
+    }
+    function hideMsg(id) {
+        const el = document.getElementById(id);
+        if (el) el.className = 'hidden text-xs mb-3';
+    }
+    function setBusy(btnId, busy, idleText, busyText) {
+        const b = document.getElementById(btnId);
+        if (!b) return;
+        b.disabled = busy;
+        b.textContent = busy ? busyText : idleText;
+        b.style.opacity = busy ? '.7' : '';
+    }
+    function debounce(fn, ms) {
+        let t;
+        return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+    }
+
+    // ── Personalize: photo (with crop) + display name ────────
+    const AVATAR_SIZE = 256;                    // output: 256x256 square
+    const MAX_SOURCE_BYTES = 10 * 1024 * 1024;  // refuse absurdly large originals up front
+    const CROP_VIEW = 280;                      // on-screen crop circle diameter (px)
 
     function buildPersonalizeHTML() {
         return `
-        <div class="bg-card-bg border border-border-color rounded-xl p-4 mb-4">
+        <div class="bg-card-bg border border-border-color rounded-2xl p-4 mb-4">
             <label class="text-xs text-text-secondary block mb-3">Profile picture</label>
             <div class="flex items-center gap-4 mb-2">
                 <div id="pz-avatar-preview" class="avatar w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-2xl font-bold flex-shrink-0"></div>
                 <div class="flex flex-col gap-2 min-w-0">
                     <button type="button" onclick="document.getElementById('pz-file').click()" id="pz-upload-btn"
-                        class="btn-press text-sm font-semibold bg-white/5 border border-border-color hover:border-accent-green/50 rounded-lg px-4 py-2 transition-colors duration-150">
-                        Upload photo
+                        class="btn-press text-sm font-semibold bg-pill-bg border border-border-color hover:border-accent-green/50 rounded-lg px-4 py-2 transition-colors duration-150">
+                        Choose photo
                     </button>
                     <button type="button" onclick="removePhoto()" id="pz-remove-btn"
                         class="btn-press text-xs font-semibold text-red-400 hover:text-red-300 text-left px-1 transition-colors duration-150 ${currentUser.avatarUrl ? '' : 'hidden'}">
@@ -258,15 +397,16 @@
                 </div>
             </div>
             <input id="pz-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="onPhotoChosen(event)">
-            <div id="pz-photo-status" class="text-xs min-h-[16px] mt-2 text-text-secondary">JPG, PNG or WebP. It will be cropped to a square.</div>
+            <div id="pz-photo-status" class="text-xs min-h-[16px] mt-2 text-text-secondary">You'll choose which part of the photo to use.</div>
         </div>
 
-        <div class="bg-card-bg border border-border-color rounded-xl p-4 mb-4">
+        <div class="bg-card-bg border border-border-color rounded-2xl p-4 mb-4">
             <label class="text-xs text-text-secondary block mb-2">Display name</label>
             <input id="pz-displayname" type="text" maxlength="30" value="${escapeHtml(currentUser.displayName || currentUser.username)}"
-                class="w-full bg-app-bg border border-border-color rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-accent-green">
+                class="field w-full rounded-lg px-3 py-2.5 text-sm">
+            <p class="text-[11px] text-text-muted mt-2">Shown to opponents. Your @username stays the same.</p>
         </div>
-        <div id="pz-error" class="hidden text-xs text-red-400 mb-3"></div>
+        <div id="pz-error" class="hidden text-xs mb-3"></div>
         <button onclick="savePersonalize()" id="pz-save-btn"
             class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
             Save name
@@ -288,36 +428,171 @@
             (kind === 'error' ? 'text-red-400' : kind === 'ok' ? 'text-accent-green' : 'text-text-secondary');
     }
 
-    // Load the picked file, center-crop to a square, downscale to 256x256 and
-    // re-encode as JPEG. Re-encoding through a canvas also strips EXIF data
-    // (GPS location, camera info) from the user's photo before it leaves the phone.
-    async function fileToAvatarBlob(file) {
-        const url = URL.createObjectURL(file);
+    // ---- Crop tool state ----
+    // The image is drawn at (offX, offY) with uniform scale `scale`, inside a
+    // CROP_VIEW x CROP_VIEW circle. minScale makes the image just cover the
+    // circle, so there can never be empty space inside the crop.
+    const crop = { img: null, url: null, nw: 0, nh: 0, scale: 1, minScale: 1, maxScale: 1, offX: 0, offY: 0, drag: null, pinch: null };
+
+    function clampCrop() {
+        const w = crop.nw * crop.scale, h = crop.nh * crop.scale;
+        // offset is the top-left of the image relative to the circle's box
+        crop.offX = Math.min(0, Math.max(CROP_VIEW - w, crop.offX));
+        crop.offY = Math.min(0, Math.max(CROP_VIEW - h, crop.offY));
+    }
+    function paintCrop() {
+        const el = document.getElementById('crop-img');
+        el.style.transform = `translate(${crop.offX}px, ${crop.offY}px) scale(${crop.scale})`;
+    }
+    // Zoom keeping a chosen point (in circle coordinates) fixed under the finger/cursor
+    function zoomAt(newScale, cx, cy) {
+        newScale = Math.min(crop.maxScale, Math.max(crop.minScale, newScale));
+        const ratio = newScale / crop.scale;
+        crop.offX = cx - (cx - crop.offX) * ratio;
+        crop.offY = cy - (cy - crop.offY) * ratio;
+        crop.scale = newScale;
+        clampCrop();
+        paintCrop();
+        const range = document.getElementById('crop-zoom');
+        range.value = crop.maxScale === crop.minScale ? 0 : Math.round(((newScale - crop.minScale) / (crop.maxScale - crop.minScale)) * 100);
+    }
+
+    function openCropper(file) {
+        return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = document.getElementById('crop-img');
+            img.onload = () => {
+                crop.img = img; crop.url = url;
+                crop.nw = img.naturalWidth; crop.nh = img.naturalHeight;
+                if (!crop.nw || !crop.nh) { URL.revokeObjectURL(url); return reject(new Error('Could not read that image. Try a different photo.')); }
+                crop.minScale = CROP_VIEW / Math.min(crop.nw, crop.nh); // shorter side exactly fills the circle
+                crop.maxScale = crop.minScale * 4;                       // up to 4x zoom
+                crop.scale = crop.minScale;
+                crop.offX = (CROP_VIEW - crop.nw * crop.scale) / 2;      // start centered
+                crop.offY = (CROP_VIEW - crop.nh * crop.scale) / 2;
+                img.style.width = crop.nw + 'px';
+                img.style.height = crop.nh + 'px';
+                clampCrop(); paintCrop();
+                document.getElementById('crop-zoom').value = 0;
+                hideMsg('crop-error');
+                document.getElementById('crop-modal').classList.remove('hidden');
+                lucide.createIcons();
+                resolve();
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image. Try a different photo.')); };
+            img.src = url;
+        });
+    }
+
+    function closeCropper() {
+        document.getElementById('crop-modal').classList.add('hidden');
+        if (crop.url) URL.revokeObjectURL(crop.url);
+        crop.url = null; crop.img = null; crop.drag = null; crop.pinch = null;
+        document.getElementById('crop-img').removeAttribute('src');
+    }
+    function cancelCrop() { closeCropper(); setPhotoStatus("You'll choose which part of the photo to use.", 'info'); }
+
+    // Pointer events cover mouse, touch and pen with one code path.
+    (function wireCropGestures() {
+        const stage = document.getElementById('crop-stage');
+        const pointers = new Map();
+        const local = (e) => { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+
+        stage.addEventListener('pointerdown', (e) => {
+            stage.setPointerCapture(e.pointerId);
+            pointers.set(e.pointerId, local(e));
+            if (pointers.size === 1) {
+                crop.drag = { sx: e.clientX, sy: e.clientY, ox: crop.offX, oy: crop.offY };
+                crop.pinch = null;
+            } else if (pointers.size === 2) {
+                const [a, b] = [...pointers.values()];
+                crop.pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), scale: crop.scale };
+                crop.drag = null;
+            }
+        });
+        stage.addEventListener('pointermove', (e) => {
+            if (!pointers.has(e.pointerId)) return;
+            pointers.set(e.pointerId, local(e));
+            if (pointers.size === 2 && crop.pinch) {
+                const [a, b] = [...pointers.values()];
+                const d = Math.hypot(a.x - b.x, a.y - b.y);
+                zoomAt(crop.pinch.scale * (d / crop.pinch.dist), (a.x + b.x) / 2, (a.y + b.y) / 2);
+            } else if (crop.drag) {
+                crop.offX = crop.drag.ox + (e.clientX - crop.drag.sx);
+                crop.offY = crop.drag.oy + (e.clientY - crop.drag.sy);
+                clampCrop(); paintCrop();
+            }
+        });
+        const end = (e) => {
+            pointers.delete(e.pointerId);
+            if (pointers.size < 2) crop.pinch = null;
+            if (pointers.size === 1) { // continue as a drag from the remaining finger
+                const [p] = [...pointers.values()];
+                const r = stage.getBoundingClientRect();
+                crop.drag = { sx: p.x + r.left, sy: p.y + r.top, ox: crop.offX, oy: crop.offY };
+            } else if (pointers.size === 0) crop.drag = null;
+        };
+        stage.addEventListener('pointerup', end);
+        stage.addEventListener('pointercancel', end);
+        stage.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const p = local(e);
+            zoomAt(crop.scale * (e.deltaY < 0 ? 1.08 : 1 / 1.08), p.x, p.y);
+        }, { passive: false });
+
+        document.getElementById('crop-zoom').addEventListener('input', (e) => {
+            const t = Number(e.target.value) / 100;
+            zoomAt(crop.minScale + (crop.maxScale - crop.minScale) * t, CROP_VIEW / 2, CROP_VIEW / 2);
+        });
+    })();
+
+    // Render exactly the region inside the circle to a 256x256 JPEG. Re-encoding
+    // through a canvas also strips EXIF data (GPS location, camera info).
+    function renderCropBlob() {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = AVATAR_SIZE;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#252525';
+        ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
+        ctx.imageSmoothingQuality = 'high';
+        // Visible square in SOURCE-image pixels
+        const sx = -crop.offX / crop.scale;
+        const sy = -crop.offY / crop.scale;
+        const side = CROP_VIEW / crop.scale;
+        ctx.drawImage(crop.img, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
+        return new Promise((resolve, reject) =>
+            canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not process that image.'))), 'image/jpeg', 0.85));
+    }
+
+    async function confirmCrop() {
+        hideMsg('crop-error');
+        const saveBtn = document.getElementById('crop-save');
+        const cancelBtn = document.getElementById('crop-cancel');
+        saveBtn.disabled = cancelBtn.disabled = true;
+        saveBtn.textContent = 'Uploading...';
         try {
-            const img = await new Promise((resolve, reject) => {
-                const i = new Image();
-                i.onload = () => resolve(i);
-                i.onerror = () => reject(new Error('Could not read that image. Try a different photo.'));
-                i.src = url;
+            const blob = await renderCropBlob();
+            const res = await fetch('/api/auth/avatar', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'image/jpeg', Authorization: 'Bearer ' + token },
+                body: blob,
             });
-            const side = Math.min(img.naturalWidth, img.naturalHeight);
-            if (!side) throw new Error('Could not read that image. Try a different photo.');
-            const sx = (img.naturalWidth - side) / 2;
-            const sy = (img.naturalHeight - side) / 2;
+            let data = {};
+            try { data = await res.json(); } catch (_) {}
+            if (res.status === 401) { sessionExpired(); return; }
+            if (!res.ok) throw new Error(data.message || `Upload failed (status ${res.status})`);
 
-            const canvas = document.createElement('canvas');
-            canvas.width = canvas.height = AVATAR_SIZE;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#1A1A1A'; // transparent PNGs get a dark backdrop instead of black-on-JPEG
-            ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
-
-            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-            if (!blob) throw new Error('Could not process that image.');
-            return blob;
+            renderUser(data.user);
+            saveLocalUser(data.user);
+            closeCropper();
+            refreshPzPreview();
+            setPhotoStatus('Profile picture updated.', 'ok');
+        } catch (err) {
+            // Keep the cropper open so the user doesn't lose their framing
+            showMsg('crop-error', err.message, 'error');
         } finally {
-            URL.revokeObjectURL(url);
+            saveBtn.disabled = cancelBtn.disabled = false;
+            saveBtn.textContent = 'Use photo';
         }
     }
 
@@ -333,35 +608,10 @@
         if (file.size > MAX_SOURCE_BYTES) {
             return setPhotoStatus('That photo is too large (max 10 MB).', 'error');
         }
-
-        const btn = document.getElementById('pz-upload-btn');
-        btn.disabled = true;
-        setPhotoStatus('Uploading...', 'info');
         try {
-            const blob = await fileToAvatarBlob(file);
-            const res = await fetch('/api/auth/avatar', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'image/jpeg', Authorization: 'Bearer ' + token },
-                body: blob,
-            });
-            if (res.status === 401) {
-                localStorage.removeItem('minduel_token');
-                localStorage.removeItem('minduel_user');
-                window.location.href = '/index.html';
-                return;
-            }
-            let data = {};
-            try { data = await res.json(); } catch (_) {}
-            if (!res.ok) throw new Error(data.message || `Upload failed (status ${res.status})`);
-
-            renderUser(data.user);
-            localStorage.setItem('minduel_user', JSON.stringify(data.user));
-            refreshPzPreview();
-            setPhotoStatus('Profile picture updated.', 'ok');
+            await openCropper(file);
         } catch (err) {
             setPhotoStatus(err.message, 'error');
-        } finally {
-            btn.disabled = false;
         }
     }
 
@@ -372,7 +622,7 @@
         try {
             const data = await authedFetch('/api/auth/avatar', { method: 'DELETE' });
             renderUser(data.user);
-            localStorage.setItem('minduel_user', JSON.stringify(data.user));
+            saveLocalUser(data.user);
             refreshPzPreview();
             setPhotoStatus('Photo removed.', 'ok');
         } catch (err) {
@@ -383,101 +633,269 @@
     }
 
     async function savePersonalize() {
-        const errEl = document.getElementById('pz-error');
-        errEl.classList.add('hidden');
-        const btn = document.getElementById('pz-save-btn');
+        hideMsg('pz-error');
         const displayName = document.getElementById('pz-displayname').value.trim();
+        if (!displayName) return showMsg('pz-error', 'Display name cannot be empty.', 'error');
 
-        if (!displayName) {
-            errEl.textContent = 'Display name cannot be empty.';
-            errEl.classList.remove('hidden');
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Saving...';
+        setBusy('pz-save-btn', true, 'Save name', 'Saving...');
         try {
             const data = await authedFetch('/api/auth/profile', {
                 method: 'PATCH',
                 body: JSON.stringify({ displayName }),
             });
             renderUser(data.user);
-            localStorage.setItem('minduel_user', JSON.stringify(data.user));
+            saveLocalUser(data.user);
             closeCategory();
             lucide.createIcons();
         } catch (err) {
-            errEl.textContent = err.message;
-            errEl.classList.remove('hidden');
+            showMsg('pz-error', err.message, 'error');
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Save name';
+            setBusy('pz-save-btn', false, 'Save name', 'Saving...');
         }
     }
 
-    // ── Account (password + logout) ──────────────────────────
-    function buildAccountHTML() {
+    // ── Username change (needs password) ─────────────────────
+    let unSeq = 0;
+    let unOk = false;
+
+    function buildUsernameHTML() {
+        unOk = false; unSeq = 0;
         return `
-        <div class="bg-card-bg border border-border-color rounded-xl p-4 mb-4">
+        <div class="bg-card-bg border border-border-color rounded-2xl p-4 mb-4">
+            <div class="text-sm font-semibold mb-1">Change username</div>
+            <p class="text-xs text-text-secondary mb-4">Current: <span class="text-text-primary font-semibold">@${escapeHtml(currentUser.username)}</span>. You can change it once every 14 days.</p>
+
+            <label class="text-xs text-text-secondary block mb-1">New username</label>
+            <input id="un-new" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" oninput="onUsernameInput()"
+                class="field w-full rounded-lg px-3 py-2.5 text-sm">
+            <p id="un-status" class="text-[11px] mt-1.5 mb-3 min-h-[16px] text-text-muted">3-20 letters, numbers or underscores.</p>
+
+            <label class="text-xs text-text-secondary block mb-1">Confirm with your password</label>
+            <input id="un-pass" type="password" autocomplete="current-password" class="field w-full rounded-lg px-3 py-2.5 text-sm">
+        </div>
+        <div id="un-error" class="hidden text-xs mb-3"></div>
+        <button onclick="saveUsername()" id="un-save-btn"
+            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+            Update username
+        </button>`;
+    }
+
+    function setUnStatus(kind, msg) {
+        const el = document.getElementById('un-status');
+        const input = document.getElementById('un-new');
+        if (!el || !input) return;
+        const colors = { idle: 'text-text-muted', checking: 'text-text-secondary', ok: 'text-accent-green', bad: 'text-red-400' };
+        el.className = 'text-[11px] mt-1.5 mb-3 min-h-[16px] ' + colors[kind];
+        el.textContent = msg;
+        input.classList.toggle('bad', kind === 'bad');
+        input.classList.toggle('good', kind === 'ok');
+        unOk = kind === 'ok';
+    }
+
+    const checkUsernameLive = debounce(async (value, seq) => {
+        try {
+            const res = await fetch('/api/auth/check-availability?' + new URLSearchParams({ username: value }));
+            if (res.status === 429) { if (seq === unSeq) setUnStatus('idle', 'Checking paused — you can still submit.'); return; }
+            const data = await res.json();
+            if (seq !== unSeq) return; // stale reply for older text
+            const r = data.username;
+            if (!r) return setUnStatus('idle', '');
+            setUnStatus(r.available ? 'ok' : 'bad', r.message);
+        } catch (_) {
+            if (seq === unSeq) setUnStatus('idle', '');
+        }
+    }, 400);
+
+    function onUsernameInput() {
+        const value = document.getElementById('un-new').value.trim();
+        const seq = ++unSeq;
+        if (!value) return setUnStatus('idle', '3-20 letters, numbers or underscores.');
+        if (value === currentUser.username) return setUnStatus('bad', 'That is already your username.');
+        if (!USERNAME_RE.test(value)) {
+            return value.length < 3
+                ? setUnStatus('idle', 'Keep typing — at least 3 characters.')
+                : setUnStatus('bad', 'Only letters, numbers and underscores (3-20 characters).');
+        }
+        // Changing only the letter case of your own name is always fine and needs no check.
+        if (value.toLowerCase() === currentUser.username.toLowerCase()) return setUnStatus('ok', 'Only the capitalization changes.');
+        setUnStatus('checking', 'Checking...');
+        checkUsernameLive(value, seq);
+    }
+
+    async function saveUsername() {
+        hideMsg('un-error');
+        const newUsername = document.getElementById('un-new').value.trim();
+        const password = document.getElementById('un-pass').value;
+
+        if (!USERNAME_RE.test(newUsername)) return showMsg('un-error', 'Enter a valid new username first.', 'error');
+        if (newUsername === currentUser.username) return showMsg('un-error', 'That is already your username.', 'error');
+        if (!password) return showMsg('un-error', 'Enter your password to confirm.', 'error');
+
+        setBusy('un-save-btn', true, 'Update username', 'Updating...');
+        try {
+            const data = await authedFetch('/api/auth/username', {
+                method: 'PATCH',
+                body: JSON.stringify({ newUsername, password }),
+            });
+            renderUser(data.user);
+            saveLocalUser(data.user);
+            // Password is never left sitting in the DOM
+            document.getElementById('un-pass').value = '';
+            closeCategory();
+            lucide.createIcons();
+        } catch (err) {
+            // Only a "taken" rejection (409) says something is wrong with the NAME.
+            // A cooldown (429) or wrong password says nothing about the name, so the
+            // field must stay as-is and only the message under the form changes.
+            if (err.status === 409) setUnStatus('bad', err.message);
+            showMsg('un-error', err.message, 'error');
+            document.getElementById('un-pass').value = '';
+        } finally {
+            setBusy('un-save-btn', false, 'Update username', 'Updating...');
+        }
+    }
+
+    // ── Account: email + password ────────────────────────────
+    let emSeq = 0;
+
+    function buildAccountHTML() {
+        emSeq = 0;
+        return `
+        <div class="bg-card-bg border border-border-color rounded-2xl p-4 mb-4">
+            <div class="text-sm font-semibold mb-1">Email</div>
+            <p class="text-xs text-text-secondary mb-3">Current: <span id="acct-email" class="text-text-primary font-semibold break-all"></span></p>
+
+            <label class="text-xs text-text-secondary block mb-1">New email</label>
+            <input id="em-new" type="email" autocomplete="off" autocapitalize="none" spellcheck="false" oninput="onEmailInput()"
+                class="field w-full rounded-lg px-3 py-2.5 text-sm">
+            <p id="em-status" class="text-[11px] mt-1.5 mb-3 min-h-[16px] text-text-muted"></p>
+
+            <label class="text-xs text-text-secondary block mb-1">Confirm with your password</label>
+            <input id="em-pass" type="password" autocomplete="current-password" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-3">
+            <div id="em-error" class="hidden text-xs mb-3"></div>
+            <button onclick="saveEmail()" id="em-save-btn"
+                class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+                Update email
+            </button>
+        </div>
+
+        <div class="bg-card-bg border border-border-color rounded-2xl p-4 mb-4">
             <div class="text-sm font-semibold mb-3">Change password</div>
             <label class="text-xs text-text-secondary block mb-1">Current password</label>
-            <input id="pw-current" type="password" class="w-full bg-app-bg border border-border-color rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-accent-green">
+            <input id="pw-current" type="password" autocomplete="current-password" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-3">
             <label class="text-xs text-text-secondary block mb-1">New password</label>
-            <input id="pw-new" type="password" placeholder="Min 6 characters" class="w-full bg-app-bg border border-border-color rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-accent-green">
+            <input id="pw-new" type="password" autocomplete="new-password" placeholder="Min 6 characters" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-3">
             <label class="text-xs text-text-secondary block mb-1">Confirm new</label>
-            <input id="pw-confirm" type="password" class="w-full bg-app-bg border border-border-color rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-accent-green">
+            <input id="pw-confirm" type="password" autocomplete="new-password" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-3">
+            <div id="pw-error" class="hidden text-xs mb-3"></div>
+            <button onclick="savePassword()" id="pw-save-btn"
+                class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+                Update password
+            </button>
         </div>
-        <div id="pw-error" class="hidden text-xs text-red-400 mb-2"></div>
-        <div id="pw-success" class="hidden text-xs text-accent-green mb-2"></div>
-        <button onclick="savePassword()" id="pw-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)] mb-4">
-            Update password
-        </button>
 
-        <button onclick="logout()" class="btn-press w-full flex items-center gap-2.5 bg-card-bg border border-border-color rounded-xl px-4 py-3.5 text-left text-red-400 hover:bg-white/5 transition-colors duration-150">
+        <button onclick="logout()" class="btn-press w-full flex items-center gap-2.5 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left text-red-400 hover:bg-white/5 transition-colors duration-150">
             <i data-lucide="log-out" class="w-4 h-4 shrink-0"></i><span class="text-sm font-semibold">Sign out</span>
         </button>`;
     }
 
-    async function savePassword() {
-        const errEl = document.getElementById('pw-error');
-        const okEl = document.getElementById('pw-success');
-        errEl.classList.add('hidden');
-        okEl.classList.add('hidden');
+    // Email is fetched only when the Account page opens, never kept in localStorage.
+    // Called by openCategory after the HTML is injected.
+    function fillAccountEmail() {
+        const el = document.getElementById('acct-email');
+        if (el && currentUser && currentUser.email) el.textContent = currentUser.email;
+    }
 
+    function setEmStatus(kind, msg) {
+        const el = document.getElementById('em-status');
+        const input = document.getElementById('em-new');
+        if (!el || !input) return;
+        const colors = { idle: 'text-text-muted', checking: 'text-text-secondary', ok: 'text-accent-green', bad: 'text-red-400' };
+        el.className = 'text-[11px] mt-1.5 mb-3 min-h-[16px] ' + colors[kind];
+        el.textContent = msg;
+        input.classList.toggle('bad', kind === 'bad');
+        input.classList.toggle('good', kind === 'ok');
+    }
+
+    const checkEmailLive = debounce(async (value, seq) => {
+        try {
+            const res = await fetch('/api/auth/check-availability?' + new URLSearchParams({ email: value }));
+            if (res.status === 429) { if (seq === emSeq) setEmStatus('idle', 'Checking paused — you can still submit.'); return; }
+            const data = await res.json();
+            if (seq !== emSeq) return;
+            const r = data.email;
+            if (!r) return setEmStatus('idle', '');
+            setEmStatus(r.available ? 'ok' : 'bad', r.message);
+        } catch (_) {
+            if (seq === emSeq) setEmStatus('idle', '');
+        }
+    }, 400);
+
+    function onEmailInput() {
+        const value = document.getElementById('em-new').value.trim();
+        const seq = ++emSeq;
+        if (!value) return setEmStatus('idle', '');
+        if (currentUser.email && value.toLowerCase() === currentUser.email.toLowerCase()) return setEmStatus('bad', 'That is already your email.');
+        if (!EMAIL_RE.test(value)) return setEmStatus('idle', '');
+        setEmStatus('checking', 'Checking...');
+        checkEmailLive(value, seq);
+    }
+
+    async function saveEmail() {
+        hideMsg('em-error');
+        const newEmail = document.getElementById('em-new').value.trim();
+        const password = document.getElementById('em-pass').value;
+
+        if (!EMAIL_RE.test(newEmail)) return showMsg('em-error', 'Enter a valid email address.', 'error');
+        if (!password) return showMsg('em-error', 'Enter your password to confirm.', 'error');
+
+        setBusy('em-save-btn', true, 'Update email', 'Updating...');
+        try {
+            const data = await authedFetch('/api/auth/email', {
+                method: 'PATCH',
+                body: JSON.stringify({ newEmail, password }),
+            });
+            renderUser(data.user);
+            currentUser = data.user; // keep the email in memory only, for the Account page
+            saveLocalUser(data.user);
+            document.getElementById('acct-email').textContent = data.user.email;
+            document.getElementById('em-new').value = '';
+            document.getElementById('em-pass').value = '';
+            setEmStatus('idle', '');
+            showMsg('em-error', 'Email updated.', 'ok');
+        } catch (err) {
+            if (err.status === 409) setEmStatus('bad', err.message);
+            showMsg('em-error', err.message, 'error');
+            document.getElementById('em-pass').value = '';
+        } finally {
+            setBusy('em-save-btn', false, 'Update email', 'Updating...');
+        }
+    }
+
+    async function savePassword() {
+        hideMsg('pw-error');
         const current = document.getElementById('pw-current').value;
         const next = document.getElementById('pw-new').value;
         const confirm = document.getElementById('pw-confirm').value;
 
-        if (!current || !next || !confirm) {
-            errEl.textContent = 'Fill in all three fields.';
-            errEl.classList.remove('hidden');
-            return;
-        }
-        if (next !== confirm) {
-            errEl.textContent = "New password and confirmation don't match.";
-            errEl.classList.remove('hidden');
-            return;
-        }
+        if (!current || !next || !confirm) return showMsg('pw-error', 'Fill in all three fields.', 'error');
+        if (next.length < 6) return showMsg('pw-error', 'New password must be at least 6 characters.', 'error');
+        if (next !== confirm) return showMsg('pw-error', "New password and confirmation don't match.", 'error');
 
-        const btn = document.getElementById('pw-save-btn');
-        btn.disabled = true;
-        btn.textContent = 'Updating...';
+        setBusy('pw-save-btn', true, 'Update password', 'Updating...');
         try {
             await authedFetch('/api/auth/password', {
                 method: 'PATCH',
                 body: JSON.stringify({ currentPassword: current, newPassword: next }),
             });
-            okEl.textContent = 'Password updated.';
-            okEl.classList.remove('hidden');
+            showMsg('pw-error', 'Password updated.', 'ok');
             document.getElementById('pw-current').value = '';
             document.getElementById('pw-new').value = '';
             document.getElementById('pw-confirm').value = '';
         } catch (err) {
-            errEl.textContent = err.message;
-            errEl.classList.remove('hidden');
+            showMsg('pw-error', err.message, 'error');
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Update password';
+            setBusy('pw-save-btn', false, 'Update password', 'Updating...');
         }
     }
 
