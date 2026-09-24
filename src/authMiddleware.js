@@ -1,40 +1,36 @@
-const jwt = require('jsonwebtoken');
-const User = require('./User');
+const { authenticateToken } = require('./authCore');
 
-// Protects a route: requires a valid Bearer token
+// Protects a route: requires a valid Bearer token belonging to an account that
+// is active, not banned/suspended, and whose token version is still current.
 const protect = async (req, res, next) => {
   try {
     let token;
     const authHeader = req.headers.authorization;
-
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
     }
 
-    if (!token) {
-      return res.status(401).json({ message: 'Not authorized, no token provided' });
-    }
+    const result = await authenticateToken(token);
+    if (!result.ok) return res.status(result.status).json(result.body);
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-
-    if (!user || !user.isActive) {
-      return res.status(401).json({ message: 'Not authorized, user not found' });
-    }
-
-    req.user = user;
+    req.user = result.user;
     next();
   } catch (err) {
-    return res.status(401).json({ message: 'Not authorized, token invalid or expired' });
+    next(err);
   }
 };
 
-// Restricts a route to admin users only (use after `protect`)
-const adminOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
-    return next();
-  }
-  return res.status(403).json({ message: 'Admin access required' });
+// Restricts a route to certain roles (use after `protect`). The role comes
+// from the database on every request, never from the token or the client.
+const requireRole = (message, ...roles) => (req, res, next) => {
+  if (req.user && roles.includes(req.user.role)) return next();
+  return res.status(403).json({ message });
 };
 
-module.exports = { protect, adminOnly };
+// Admin only: role assignment, activity log, and (later) Question CRUD.
+const adminOnly = requireRole('Admin access required', 'admin');
+
+// Moderators and admins: searching accounts, ban / suspend.
+const staffOnly = requireRole('Staff access required', 'moderator', 'admin');
+
+module.exports = { protect, adminOnly, staffOnly, requireRole };

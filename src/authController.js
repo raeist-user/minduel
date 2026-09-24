@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('./User');
 const { sendPasswordResetEmail } = require('./emailService');
+const { restrictionStatus } = require('./moderation');
+const { restrictionBody } = require('./authCore');
 
 // Usernames: letters, numbers, underscore only, 3-20 chars. Keeps names
 // clean for leaderboards / opponent display and avoids lookalike tricks.
@@ -18,8 +20,11 @@ const usernameQuery = (username) => ({
   username: { $regex: new RegExp(`^${escapeRegex(username)}$`, 'i') },
 });
 
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+// `tv` is the user's tokenVersion at the moment of issue. If the password is
+// changed or reset (or the account is banned) the stored version goes up and
+// every older token stops working (see authCore.authenticateToken).
+const generateToken = (user) => {
+  return jwt.sign({ id: user._id, tv: user.tokenVersion || 0 }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 };
@@ -63,6 +68,14 @@ const register = async (req, res, next) => {
     if (!username || !email || !password) {
       return res.status(400).json({ message: 'Username, email and password are required' });
     }
+    // One checkbox on the form covers both: "I am at least 13 and I agree to the
+    // Terms and Privacy Policy". Only a real `true` counts, never "true"/1.
+    if (req.body.acceptTerms !== true) {
+      return res.status(400).json({
+        message: 'You must confirm you are at least 13 and accept the Terms and Privacy Policy',
+        field: 'acceptTerms',
+      });
+    }
     if (!USERNAME_REGEX.test(username)) {
       return res.status(400).json({
         message: 'Username must be 3-20 characters: letters, numbers and underscores only',
@@ -90,7 +103,15 @@ const register = async (req, res, next) => {
 
     let user;
     try {
-      user = await User.create({ username, email, password, displayName: username });
+      user = await User.create({
+        username,
+        email,
+        password,
+        displayName: username,
+        termsAcceptedAt: new Date(),
+        termsVersion: User.TERMS_VERSION,
+        ageConfirmed: true,
+      });
     } catch (err) {
       // Two people can pass the check above at the same instant; the unique
       // index in MongoDB is what actually stops the duplicate. Translate that
@@ -105,7 +126,7 @@ const register = async (req, res, next) => {
       throw err;
     }
 
-    const token = generateToken(user._id);
+    const token = generateToken(user);
     res.status(201).json({ token, user: user.toSafeObject() });
   } catch (err) {
     next(err);
@@ -204,7 +225,14 @@ const login = async (req, res, next) => {
 
     await user.resetFailedLogins();
 
-    const token = generateToken(user._id);
+    // Only reached with the correct password, so this never reveals whether an
+    // account exists or is banned to someone who doesn't know the password.
+    const status = restrictionStatus(user.restriction);
+    if (status !== 'active') {
+      return res.status(403).json(restrictionBody(user, status));
+    }
+
+    const token = generateToken(user);
     res.status(200).json({ token, user: user.toSafeObject() });
   } catch (err) {
     next(err);
@@ -493,9 +521,32 @@ const changePassword = async (req, res, next) => {
     }
 
     user.password = String(newPassword); // pre-save hook re-hashes
+    // Ends every other session (any device that still holds an old token).
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
-    res.status(200).json({ message: 'Password updated' });
+    // This device stays signed in: hand it a token for the new version.
+    res.status(200).json({ message: 'Password updated', token: generateToken(user) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route   POST /api/auth/accept-terms   { acceptTerms: true }
+// @access  Private
+// For accounts created before the Terms/age checkbox existed, or after the
+// Terms version changes. Registration records this itself.
+const acceptTerms = async (req, res, next) => {
+  try {
+    if (req.body.acceptTerms !== true) {
+      return res.status(400).json({ message: 'You must confirm you are at least 13 and accept the Terms and Privacy Policy' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { termsAcceptedAt: new Date(), termsVersion: User.TERMS_VERSION, ageConfirmed: true },
+      { new: true }
+    );
+    res.status(200).json({ user: user.toSafeObject() });
   } catch (err) {
     next(err);
   }
@@ -582,6 +633,7 @@ const resetPassword = async (req, res, next) => {
     }
 
     user.password = password; // pre-save hook re-hashes
+    user.tokenVersion = (user.tokenVersion || 0) + 1; // signs out every existing session
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.resetFailedLogins();
@@ -605,6 +657,7 @@ module.exports = {
   changePassword,
   changeUsername,
   changeEmail,
+  acceptTerms,
   forgotPassword,
   resetPassword,
 };
