@@ -59,20 +59,38 @@
     /* Tag chips */
     .tag-chip { border: 1px solid #3A3A3A; color: #A2A2A2; white-space: nowrap; transition: all .15s; }
     .tag-chip.active { border-color: transparent; color: #171717; }
-    .tag-dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+    .tag-icon { width: 13px; height: 13px; flex-shrink: 0; }
 
-    /* Sort segmented control */
+    /* Sort segmented control (used inside filter dropdowns) */
     .seg-btn { color: #747474; transition: all .15s; }
     .seg-btn.active { color: #FFFFFF; background: #292929; }
+
+    /* Filter trigger button */
+    .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; }
+    .filter-btn.has-active { border-color: #E2B714; color: #E2B714; }
+
+    /* Filter dropdown panel */
+    .filter-panel { background: #1E1E1E; border: 1px solid #3A3A3A; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+    .filter-option { color: #A2A2A2; transition: all .15s; }
+    .filter-option.active { color: #E2B714; background: rgba(226,183,20,.08); }
+    .filter-option:hover:not(.active) { background: #252525; color: #FFFFFF; }
 
     /* Post card */
     .post-card { background: #1E1E1E; border: 1px solid #3A3A3A; transition: border-color .15s, transform .1s; }
     .post-card:active { transform: scale(.99); }
     .post-card:hover { border-color: #4A4A4A; }
+    .post-card.visited { background: transparent; border-color: #2C2C2C; }
+    .post-card.visited .post-title { color: #A2A2A2; font-weight: 600; }
 
-    /* Reaction pill */
-    .reax { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; }
-    .reax.mine { border-color: #E2B714; color: #E2B714; background: rgba(226,183,20,.1); }
+    /* Reaction trigger + flyout picker */
+    .react-trigger { border: 1px solid #3A3A3A; color: #747474; transition: all .15s; }
+    .react-trigger:hover { color: #E2B714; border-color: #4A4A4A; }
+    .react-trigger.mine { border-color: #E2B714; color: #E2B714; background: rgba(226,183,20,.1); }
+    .react-picker { background: #252525; border: 1px solid #3A3A3A; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+    .react-picker button { transition: transform .1s; }
+    .react-picker button:hover { transform: scale(1.15); }
+    .reax-badge { border: 1px solid #3A3A3A; color: #A2A2A2; }
+    .reax-badge.mine { border-color: #E2B714; color: #E2B714; background: rgba(226,183,20,.1); }
 
     /* Reply bubble */
     .reply-bubble { background: #1E1E1E; border: 1px solid #3A3A3A; }
@@ -127,17 +145,31 @@
             </div>
         </div>
 
-        <!-- Tag filter chips -->
-        <div class="flex-shrink-0 px-5 pt-3 pb-1">
-            <div id="tag-row" class="flex items-center gap-2 overflow-x-auto pb-1" style="scrollbar-width:none"></div>
-        </div>
+        <!-- Filter bar: one icon button opens Sort / Topic / Display -->
+        <div class="flex-shrink-0 px-5 pt-3 pb-3 relative">
+            <div class="flex items-center gap-2">
+                <button id="filter-toggle-btn" onclick="toggleFilterPanel()" aria-label="Filters" title="Filters"
+                    class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                    <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+                    <span>Filters</span>
+                </button>
+                <div id="active-filter-chips" class="flex items-center gap-1.5 overflow-x-auto" style="scrollbar-width:none"></div>
+            </div>
 
-        <!-- Sort segmented control -->
-        <div class="flex-shrink-0 px-5 pb-3 pt-1">
-            <div class="inline-flex items-center gap-1 bg-input-bg border border-border-color rounded-lg p-1">
-                <button data-sort="active" onclick="setSort('active')" class="seg-btn text-xs font-semibold px-3 py-1.5 rounded-md">Recent activity</button>
-                <button data-sort="new" onclick="setSort('new')" class="seg-btn text-xs font-semibold px-3 py-1.5 rounded-md">New</button>
-                <button data-sort="top" onclick="setSort('top')" class="seg-btn text-xs font-semibold px-3 py-1.5 rounded-md">Top</button>
+            <!-- Filter panel -->
+            <div id="filter-panel" class="filter-panel hidden absolute left-5 right-5 top-[calc(100%+6px)] z-30 rounded-xl p-3">
+                <div class="mb-3">
+                    <div class="text-[11px] font-semibold text-text-muted mb-1.5 px-1">Sort by</div>
+                    <div id="sort-options" class="flex flex-col"></div>
+                </div>
+                <div class="mb-3">
+                    <div class="text-[11px] font-semibold text-text-muted mb-1.5 px-1">Topic</div>
+                    <div id="topic-options" class="flex flex-col"></div>
+                </div>
+                <div>
+                    <div class="text-[11px] font-semibold text-text-muted mb-1.5 px-1">Display</div>
+                    <div id="display-options" class="flex flex-col"></div>
+                </div>
             </div>
         </div>
 
@@ -257,13 +289,23 @@ const STORAGE_KEY = 'aptiks_community_posts_v1';
 const VIEWED_KEY = 'aptiks_community_viewed_v1';
 
 const TAGS = [
-    { id: 'general',  name: 'General',      color: '#60A5FA' },
-    { id: 'strategy', name: 'Strategy',      color: '#E2B714' },
-    { id: 'bugs',     name: 'Bug Reports',   color: '#F87171' },
-    { id: 'feedback', name: 'Feedback',      color: '#4ADE80' },
-    { id: 'offtopic', name: 'Off Topic',     color: '#C084FC' },
+    { id: 'general',  name: 'General',      color: '#60A5FA', icon: 'message-square' },
+    { id: 'strategy', name: 'Strategy',      color: '#E2B714', icon: 'target' },
+    { id: 'bugs',     name: 'Bug Reports',   color: '#F87171', icon: 'bug' },
+    { id: 'feedback', name: 'Feedback',      color: '#4ADE80', icon: 'lightbulb' },
+    { id: 'offtopic', name: 'Off Topic',     color: '#C084FC', icon: 'coffee' },
 ];
 const REACTIONS = ['👍', '🔥', '❤️', '😂'];
+const SORTS = [
+    { id: 'active', name: 'Recent activity', icon: 'clock' },
+    { id: 'new',    name: 'New',             icon: 'sparkles' },
+    { id: 'top',    name: 'Top',             icon: 'trending-up' },
+];
+const DISPLAYS = [
+    { id: 'full',    name: 'Full',        icon: 'rows-3' },
+    { id: 'compact', name: 'Compact',     icon: 'list' },
+    { id: 'title',   name: 'Title only',  icon: 'menu' },
+];
 
 const $ = (id) => document.getElementById(id);
 
@@ -284,9 +326,12 @@ function myKey() {
 const state = {
     filterTag: 'all',
     sort: 'active',
+    display: 'full',
     search: '',
     currentPostId: null,
     composerTag: TAGS[0].id,
+    filterPanelOpen: false,
+    reactPickerOpenFor: null,
 };
 
 // ── persistence ──────────────────────────────────────────────────────
@@ -359,9 +404,11 @@ let POSTS = [];
 // ── init ─────────────────────────────────────────────────────────────
 function init() {
     POSTS = loadPosts();
-    renderTagRow();
+    state.display = localStorage.getItem('aptiks_community_display_v1') || 'full';
+    renderFilterPanel();
+    renderActiveFilterChips();
     renderComposerTags();
-    setSort('active');
+    renderList();
     lucide.createIcons();
     $('splash').style.display = 'none';
     $('reply-input').addEventListener('input', autoGrow);
@@ -371,27 +418,29 @@ function init() {
     $('reply-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); }
     });
+    document.addEventListener('click', (e) => {
+        if (state.filterPanelOpen && !$('filter-panel').contains(e.target) && !$('filter-toggle-btn').contains(e.target)) {
+            closeFilterPanel();
+        }
+        if (state.reactPickerOpenFor && !e.target.closest('.react-picker') && !e.target.closest('.react-trigger')) {
+            closeReactPicker();
+        }
+    });
 }
 function autoGrow(e) { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px'; }
 
-// ── tag chips (filter row) ──────────────────────────────────────────
-function renderTagRow() {
-    const row = $('tag-row');
-    row.innerHTML = '';
-    row.appendChild(tagChip('all', 'All posts', '#747474', state.filterTag === 'all', () => { state.filterTag = 'all'; renderTagRow(); renderList(); }));
-    TAGS.forEach((t) => {
-        row.appendChild(tagChip(t.id, t.name, t.color, state.filterTag === t.id, () => { state.filterTag = t.id; renderTagRow(); renderList(); }));
-    });
-}
+// ── composer tag chips (still chips — this picks one tag for a new post) ──
 function tagChip(id, label, color, active, onClick) {
     const btn = document.createElement('button');
     btn.className = 'tag-chip btn-press shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold' + (active ? ' active' : '');
     if (active) btn.style.background = color;
-    if (id !== 'all') {
-        const dot = document.createElement('span');
-        dot.className = 'tag-dot';
-        dot.style.background = active ? '#171717' : color;
-        btn.appendChild(dot);
+    const meta = TAGS.find((t) => t.id === id);
+    if (meta) {
+        const i = document.createElement('i');
+        i.setAttribute('data-lucide', meta.icon);
+        i.className = 'tag-icon';
+        i.style.color = active ? '#171717' : color;
+        btn.appendChild(i);
     }
     const span = document.createElement('span');
     span.textContent = label;
@@ -399,13 +448,101 @@ function tagChip(id, label, color, active, onClick) {
     btn.onclick = onClick;
     return btn;
 }
-function tagMeta(id) { return TAGS.find((t) => t.id === id) || { name: id, color: '#A2A2A2' }; }
+function tagMeta(id) { return TAGS.find((t) => t.id === id) || { name: id, color: '#A2A2A2', icon: 'hash' }; }
 
-// ── sort control ─────────────────────────────────────────────────────
-function setSort(key) {
-    state.sort = key;
-    document.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.sort === key));
-    renderList();
+// ── filter panel (sort / topic / display, all behind one icon button) ──
+function toggleFilterPanel() {
+    state.filterPanelOpen ? closeFilterPanel() : openFilterPanel();
+}
+function openFilterPanel() {
+    state.filterPanelOpen = true;
+    $('filter-panel').classList.remove('hidden');
+    $('filter-toggle-btn').classList.add('has-active');
+}
+function closeFilterPanel() {
+    state.filterPanelOpen = false;
+    $('filter-panel').classList.add('hidden');
+    $('filter-toggle-btn').classList.toggle('has-active', hasNonDefaultFilters());
+}
+function hasNonDefaultFilters() {
+    return state.filterTag !== 'all' || state.sort !== 'active' || state.display !== 'full';
+}
+
+function renderFilterPanel() {
+    // Sort options
+    const sortWrap = $('sort-options');
+    sortWrap.innerHTML = '';
+    SORTS.forEach((s) => {
+        sortWrap.appendChild(filterOption(s.icon, s.name, state.sort === s.id, () => {
+            state.sort = s.id; renderFilterPanel(); renderActiveFilterChips(); renderList();
+        }));
+    });
+
+    // Topic options
+    const topicWrap = $('topic-options');
+    topicWrap.innerHTML = '';
+    topicWrap.appendChild(filterOption('layers', 'All topics', state.filterTag === 'all', () => {
+        state.filterTag = 'all'; renderFilterPanel(); renderActiveFilterChips(); renderList();
+    }));
+    TAGS.forEach((t) => {
+        topicWrap.appendChild(filterOption(t.icon, t.name, state.filterTag === t.id, () => {
+            state.filterTag = t.id; renderFilterPanel(); renderActiveFilterChips(); renderList();
+        }));
+    });
+
+    // Display options
+    const dispWrap = $('display-options');
+    dispWrap.innerHTML = '';
+    DISPLAYS.forEach((d) => {
+        dispWrap.appendChild(filterOption(d.icon, d.name, state.display === d.id, () => {
+            state.display = d.id;
+            localStorage.setItem('aptiks_community_display_v1', d.id);
+            renderFilterPanel(); renderActiveFilterChips(); renderList();
+        }));
+    });
+
+    lucide.createIcons();
+}
+
+function filterOption(icon, label, active, onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-option btn-press flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-left' + (active ? ' active' : '');
+    btn.innerHTML = `<i data-lucide="${icon}" class="w-3.5 h-3.5 shrink-0"></i><span class="flex-1">${label}</span>`;
+    if (active) {
+        const check = document.createElement('i');
+        check.setAttribute('data-lucide', 'check');
+        check.className = 'w-3.5 h-3.5 shrink-0';
+        btn.appendChild(check);
+    }
+    btn.onclick = onClick;
+    return btn;
+}
+
+// Small chips next to the Filters button, showing what's active (tap to clear)
+function renderActiveFilterChips() {
+    const wrap = $('active-filter-chips');
+    wrap.innerHTML = '';
+    if (state.filterTag !== 'all') {
+        const meta = tagMeta(state.filterTag);
+        wrap.appendChild(activeChip(meta.icon, meta.name, () => { state.filterTag = 'all'; renderFilterPanel(); renderActiveFilterChips(); renderList(); }));
+    }
+    if (state.sort !== 'active') {
+        const meta = SORTS.find((s) => s.id === state.sort);
+        wrap.appendChild(activeChip(meta.icon, meta.name, () => { state.sort = 'active'; renderFilterPanel(); renderActiveFilterChips(); renderList(); }));
+    }
+    if (state.display !== 'full') {
+        const meta = DISPLAYS.find((d) => d.id === state.display);
+        wrap.appendChild(activeChip(meta.icon, meta.name, () => { state.display = 'full'; localStorage.setItem('aptiks_community_display_v1', 'full'); renderFilterPanel(); renderActiveFilterChips(); renderList(); }));
+    }
+    $('filter-toggle-btn').classList.toggle('has-active', hasNonDefaultFilters());
+    lucide.createIcons();
+}
+function activeChip(icon, label, onRemove) {
+    const chip = document.createElement('button');
+    chip.className = 'tag-chip btn-press shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-semibold';
+    chip.innerHTML = `<i data-lucide="${icon}" class="tag-icon"></i><span>${label}</span><i data-lucide="x" class="w-3 h-3"></i>`;
+    chip.onclick = onRemove;
+    return chip;
 }
 
 function toggleSearch() {
@@ -469,24 +606,40 @@ function avatarEl(name, size) {
 
 function postCard(post) {
     const meta = tagMeta(post.tag);
+    const visited = getViewed().includes(post.id);
     const card = document.createElement('div');
-    card.className = 'post-card rounded-2xl p-4 fade-in cursor-pointer';
+    card.className = 'post-card rounded-2xl fade-in cursor-pointer' + (visited ? ' visited' : '') +
+        (state.display === 'title' ? ' p-3' : ' p-4');
     card.onclick = () => openThread(post.id);
 
+    // ── top row: tag icon + label, pin/lock, timestamp ──
     const top = document.createElement('div');
-    top.className = 'flex items-center justify-between gap-2 mb-2';
+    top.className = 'flex items-center justify-between gap-2' + (state.display === 'title' ? '' : ' mb-2');
     const chipWrap = document.createElement('div');
     chipWrap.className = 'flex items-center gap-1.5 min-w-0';
-    const dot = document.createElement('span');
-    dot.className = 'tag-dot'; dot.style.background = meta.color;
-    chipWrap.appendChild(dot);
-    const chipLabel = document.createElement('span');
-    chipLabel.className = 'text-[11px] font-semibold truncate';
-    chipLabel.style.color = meta.color;
-    chipLabel.textContent = meta.name;
-    chipWrap.appendChild(chipLabel);
+    const icon = document.createElement('i');
+    icon.setAttribute('data-lucide', meta.icon);
+    icon.className = 'tag-icon';
+    icon.style.color = meta.color;
+    chipWrap.appendChild(icon);
+    if (state.display !== 'title') {
+        const chipLabel = document.createElement('span');
+        chipLabel.className = 'text-[11px] font-semibold truncate';
+        chipLabel.style.color = meta.color;
+        chipLabel.textContent = meta.name;
+        chipWrap.appendChild(chipLabel);
+    }
     if (post.pinned) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'pin'); i.className = 'w-3 h-3 text-accent shrink-0'; chipWrap.appendChild(i); }
     if (post.locked) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'lock'); i.className = 'w-3 h-3 text-text-muted shrink-0'; chipWrap.appendChild(i); }
+
+    if (state.display === 'title') {
+        // Title-only: icon + title inline on one row, time on the right
+        const title = document.createElement('div');
+        title.className = 'post-title font-bold text-sm truncate flex-1 min-w-0 ml-1.5';
+        title.textContent = post.title;
+        chipWrap.appendChild(title);
+        chipWrap.classList.add('flex-1');
+    }
     top.appendChild(chipWrap);
     const time = document.createElement('span');
     time.className = 'text-[11px] text-text-muted shrink-0';
@@ -494,22 +647,27 @@ function postCard(post) {
     top.appendChild(time);
     card.appendChild(top);
 
+    if (state.display === 'title') return card; // nothing else renders in title-only mode
+
     const title = document.createElement('div');
-    title.className = 'font-bold text-sm mb-1 truncate';
+    title.className = 'post-title font-bold text-sm mb-1 truncate';
     title.textContent = post.title;
     card.appendChild(title);
 
-    const body = document.createElement('div');
-    body.className = 'text-xs text-text-secondary mb-3 overflow-hidden';
-    body.style.display = '-webkit-box'; body.style.webkitLineClamp = '2'; body.style.webkitBoxOrient = 'vertical';
-    body.textContent = post.body;
-    card.appendChild(body);
+    if (state.display === 'full') {
+        const body = document.createElement('div');
+        body.className = 'text-xs text-text-secondary mb-3 overflow-hidden';
+        body.style.display = '-webkit-box'; body.style.webkitLineClamp = '2'; body.style.webkitBoxOrient = 'vertical';
+        body.textContent = post.body;
+        card.appendChild(body);
+    }
 
+    // ── bottom row: author (left) — stats, reaction trigger (right) ──
     const bottom = document.createElement('div');
-    bottom.className = 'flex items-center justify-between gap-2';
+    bottom.className = 'flex items-center justify-between gap-2' + (state.display === 'compact' ? ' mt-1' : '');
     const authorWrap = document.createElement('div');
     authorWrap.className = 'flex items-center gap-2 min-w-0';
-    authorWrap.appendChild(avatarEl(post.authorName, 20));
+    authorWrap.appendChild(avatarEl(post.authorName, state.display === 'compact' ? 18 : 20));
     const authorName = document.createElement('span');
     authorName.className = 'text-[11px] text-text-secondary truncate';
     authorName.textContent = post.authorName;
@@ -518,11 +676,25 @@ function postCard(post) {
 
     const stats = document.createElement('div');
     stats.className = 'flex items-center gap-3 text-text-muted text-[11px] shrink-0';
+    const totalReax = reactionCount(post);
     stats.innerHTML = `
         <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i>${post.replies.length}</span>
         <span class="flex items-center gap-1"><i data-lucide="eye" class="w-3 h-3"></i>${post.views}</span>
     `;
+    if (totalReax > 0) {
+        stats.innerHTML += `<span class="flex items-center gap-1"><i data-lucide="smile" class="w-3 h-3"></i>${totalReax}</span>`;
+    }
     bottom.appendChild(stats);
+
+    // Single reaction icon — opens a small emoji picker right where it sits
+    const reactBtn = document.createElement('button');
+    const mineOnCard = REACTIONS.some((e) => ((post.reactions && post.reactions[e]) || []).includes(myKey()));
+    reactBtn.className = 'react-trigger btn-press shrink-0 w-7 h-7 rounded-full flex items-center justify-center' + (mineOnCard ? ' mine' : '');
+    reactBtn.setAttribute('aria-label', 'React');
+    reactBtn.innerHTML = '<i data-lucide="smile-plus" class="w-3.5 h-3.5"></i>';
+    reactBtn.onclick = (e) => { e.stopPropagation(); openReactPickerFor(post.id, 'post', post.id, reactBtn); };
+    bottom.appendChild(reactBtn);
+
     card.appendChild(bottom);
 
     return card;
@@ -571,10 +743,10 @@ function renderThread() {
 
     const chipRow = document.createElement('div');
     chipRow.className = 'flex items-center gap-1.5 mb-3';
-    const dot = document.createElement('span'); dot.className = 'tag-dot'; dot.style.background = meta.color;
+    const icon = document.createElement('i'); icon.setAttribute('data-lucide', meta.icon); icon.className = 'tag-icon'; icon.style.color = meta.color;
     const chipLabel = document.createElement('span');
     chipLabel.className = 'text-[11px] font-semibold'; chipLabel.style.color = meta.color; chipLabel.textContent = meta.name;
-    chipRow.append(dot, chipLabel);
+    chipRow.append(icon, chipLabel);
     if (post.pinned) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'pin'); i.className = 'w-3 h-3 text-accent'; chipRow.appendChild(i); }
     if (post.locked) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'lock'); i.className = 'w-3 h-3 text-text-muted'; chipRow.appendChild(i); }
     opCard.appendChild(chipRow);
@@ -630,20 +802,65 @@ function replyBubble(post, reply) {
     return wrap;
 }
 
+// Thread view: existing reactions shown exactly where they were (as badges
+// with counts), plus one trigger icon on the right that opens the picker.
 function reactionRow(post, kind, itemId) {
     const item = kind === 'post' ? post : post.replies.find((r) => r.id === itemId);
     const row = document.createElement('div');
     row.className = 'flex items-center gap-1.5 flex-wrap';
+
     REACTIONS.forEach((emoji) => {
         const users = (item.reactions && item.reactions[emoji]) || [];
+        if (!users.length) return;
         const mine = users.includes(myKey());
-        const btn = document.createElement('button');
-        btn.className = 'reax btn-press flex items-center gap-1 rounded-full px-2.5 py-1 text-xs' + (mine ? ' mine' : '');
-        btn.innerHTML = `<span>${emoji}</span>${users.length ? `<span>${users.length}</span>` : ''}`;
-        btn.onclick = (e) => { e.stopPropagation(); toggleReaction(kind, itemId, emoji); };
-        row.appendChild(btn);
+        const badge = document.createElement('button');
+        badge.className = 'reax-badge btn-press flex items-center gap-1 rounded-full px-2.5 py-1 text-xs' + (mine ? ' mine' : '');
+        badge.innerHTML = `<span>${emoji}</span><span>${users.length}</span>`;
+        badge.onclick = (e) => { e.stopPropagation(); toggleReaction(kind, itemId, emoji); renderThread(); };
+        row.appendChild(badge);
     });
+
+    const trigger = document.createElement('button');
+    const mineAny = REACTIONS.some((e) => ((item.reactions && item.reactions[e]) || []).includes(myKey()));
+    trigger.className = 'react-trigger btn-press w-7 h-7 rounded-full flex items-center justify-center' + (mineAny ? ' mine' : '');
+    trigger.setAttribute('aria-label', 'React');
+    trigger.innerHTML = '<i data-lucide="smile-plus" class="w-3.5 h-3.5"></i>';
+    trigger.onclick = (e) => { e.stopPropagation(); openReactPickerFor(post.id, kind, itemId, trigger); };
+    row.appendChild(trigger);
+
+    lucide.createIcons();
     return row;
+}
+
+// ── floating emoji picker, anchored to whichever trigger was clicked ──
+function openReactPickerFor(postId, kind, itemId, anchorEl) {
+    closeReactPicker();
+    state.reactPickerOpenFor = itemId;
+
+    const picker = document.createElement('div');
+    picker.className = 'react-picker fixed z-[150] flex items-center gap-1 rounded-full px-2 py-1.5';
+    REACTIONS.forEach((emoji) => {
+        const btn = document.createElement('button');
+        btn.className = 'text-lg px-1';
+        btn.textContent = emoji;
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            toggleReaction(kind, itemId, emoji);
+            closeReactPicker();
+            if (!$('view-thread').classList.contains('hidden')) renderThread(); else renderList();
+        };
+        picker.appendChild(btn);
+    });
+    document.body.appendChild(picker);
+
+    const r = anchorEl.getBoundingClientRect();
+    picker.style.top = (r.top - 44) + 'px';
+    let left = r.left + r.width / 2 - picker.offsetWidth / 2;
+    picker.style.left = Math.max(8, Math.min(left, window.innerWidth - picker.offsetWidth - 8)) + 'px';
+}
+function closeReactPicker() {
+    state.reactPickerOpenFor = null;
+    document.querySelectorAll('.react-picker').forEach((el) => el.remove());
 }
 
 function toggleReaction(kind, itemId, emoji) {
@@ -746,7 +963,8 @@ function submitPost() {
     savePosts(POSTS);
     closeComposer();
     state.filterTag = 'all';
-    renderTagRow();
+    renderFilterPanel();
+    renderActiveFilterChips();
     renderList();
     openThread(post.id);
 }
