@@ -7,6 +7,9 @@ const authRoutes = require('./src/authRoutes');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
 
 const app = express();
+
+// Render sits behind a reverse proxy; trust the first hop so req.ip and
+// express-rate-limit read the real client IP from X-Forwarded-For.
 app.set('trust proxy', 1);
 
 // --- DB ---
@@ -45,4 +48,12 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Minduel backend running on port ${PORT}`);
+});
+
+// Surface anything that would otherwise crash the process silently
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
 });
