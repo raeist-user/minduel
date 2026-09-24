@@ -7,6 +7,8 @@ const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const connectDB = require('./src/db');
 const authRoutes = require('./src/authRoutes');
+const adminRoutes = require('./src/adminRoutes');
+const userRoutes = require('./src/userRoutes');
 const { verifyEmailSetup } = require('./src/emailService');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
 
@@ -66,6 +68,8 @@ app.use('/api', (req, res, next) => {
 
 // --- Routes ---
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/users', userRoutes);
 
 // --- Error handling (must be last) ---
 app.use(notFound);
