@@ -7,6 +7,7 @@ const authRoutes = require('./src/authRoutes');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // --- DB ---
 connectDB();
