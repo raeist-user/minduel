@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const mongoose = require('mongoose');
+const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
 const connectDB = require('./src/db');
 const authRoutes = require('./src/authRoutes');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
@@ -16,8 +18,21 @@ app.set('trust proxy', 1);
 // --- DB ---
 connectDB();
 
+// --- Security headers ---
+// CSP is disabled for now because the frontend pages load Tailwind/fonts/
+// icons from CDNs and use inline <script> tags; a default CSP would block
+// them. Once the frontend build is more settled, tighten this with an
+// explicit allowlist (or move to bundled assets + nonces).
+app.use(helmet({ contentSecurityPolicy: false }));
+
 // --- Core middleware ---
 app.use(express.json());
+
+// Strips any keys starting with "$" or containing "." from
+// req.body/query/params, so user input can't be crafted into a MongoDB
+// operator injection (e.g. { "email": { "$gt": "" } }). Must run after
+// express.json() so req.body is already parsed.
+app.use(mongoSanitize());
 
 const allowedOrigins = (process.env.CLIENT_ORIGINS || '')
   .split(',')
