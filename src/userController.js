@@ -2,6 +2,7 @@ const User = require('./User');
 const Friendship = require('./Friendship');
 const { restrictionStatus } = require('./moderation');
 const { withPresence } = require('./friendController');
+const { SOCIAL_KEYS } = require('./profileFields');
 
 const OBJECT_ID = /^[a-f\d]{24}$/i;
 const LEADERBOARD_SIZE = 50;
@@ -44,7 +45,7 @@ const getPublicProfile = async (req, res, next) => {
     if (!OBJECT_ID.test(id)) return res.status(404).json({ message: 'Player not found' });
 
     const user = await User.findById(id).select(
-      `${User.PUBLIC_SELECT} isActive restriction lastSeenAt createdAt matchesPlayed wins losses draws totalCorrectAnswers totalQuestionsAnswered`
+      `${User.PUBLIC_SELECT} isActive restriction lastSeenAt createdAt bio location socialLinks matchesPlayed wins losses draws totalCorrectAnswers totalQuestionsAnswered`
     );
     if (!user || !user.isActive || restrictionStatus(user.restriction) === 'banned') {
       return res.status(404).json({ message: 'Player not found' });
@@ -64,6 +65,12 @@ const getPublicProfile = async (req, res, next) => {
     }
 
     const out = { user: { ...user.toPublicObject(), relation, requestId } };
+    // About-you fields are public: the person chose to write them.
+    out.user.bio = user.bio || '';
+    out.user.location = user.location || '';
+    out.user.socialLinks = Object.fromEntries(
+      SOCIAL_KEYS.map((k) => [k, (user.socialLinks && user.socialLinks[k]) || '']).filter(([, v]) => v)
+    );
     if (relation === 'friend' || relation === 'self') {
       const total = user.totalQuestionsAnswered || 0;
       Object.assign(out.user, {

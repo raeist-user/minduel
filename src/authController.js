@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('./User');
+const { cleanBio, cleanLocation, cleanSocials, BIO_MAX, LOCATION_MAX } = require('./profileFields');
 const { sendPasswordResetEmail } = require('./emailService');
 const { restrictionStatus } = require('./moderation');
 const { restrictionBody } = require('./authCore');
@@ -251,12 +252,28 @@ const getMe = async (req, res, next) => {
 
 // @route   PATCH /api/auth/profile
 // @access  Private
-// Personalization: display name only. (The profile picture has its own
-// endpoints below; avatar background colors no longer exist.)
+// Personalization: display name, bio, location, social links. Send only the
+// fields you want to change. (The profile picture has its own endpoints below.)
 const updateProfile = async (req, res, next) => {
   try {
-    const { displayName } = req.body;
+    const { displayName, bio, location, socialLinks } = req.body;
     const updates = {};
+
+    if (bio !== undefined) {
+      const c = cleanBio(bio);
+      if (!c.ok) return res.status(400).json({ message: `Bio can be up to ${BIO_MAX} characters.`, field: 'bio' });
+      updates.bio = c.value;
+    }
+    if (location !== undefined) {
+      const c = cleanLocation(location);
+      if (!c.ok) return res.status(400).json({ message: `Location can be up to ${LOCATION_MAX} characters.`, field: 'location' });
+      updates.location = c.value;
+    }
+    if (socialLinks !== undefined) {
+      const c = cleanSocials(socialLinks);
+      if (!c.ok) return res.status(400).json({ message: c.message, field: 'socialLinks' });
+      for (const [k, v] of Object.entries(c.value)) updates[`socialLinks.${k}`] = v;
+    }
 
     if (displayName !== undefined) {
       const trimmed = String(displayName).trim();

@@ -63,6 +63,19 @@ const userSchema = new mongoose.Schema(
     avatarData: { type: Buffer, select: false },
     avatarContentType: { type: String, select: false },
 
+    // About you (all optional). Social links are handles, not URLs (see profileFields.js).
+    bio: { type: String, trim: true, maxlength: 160, default: '' },
+    location: { type: String, trim: true, maxlength: 30, default: '' },
+    socialLinks: {
+      instagram: { type: String, default: '' },
+      x: { type: String, default: '' },
+      github: { type: String, default: '' },
+      youtube: { type: String, default: '' },
+      twitch: { type: String, default: '' },
+      discord: { type: String, default: '' },
+      website: { type: String, default: '', maxlength: 100 },
+    },
+
     // Plain string in the database: "player" (default), "moderator" or "admin".
     // To make someone staff, edit this field on their user document (see the
     // README) or run `npm run set-role`. The getter normalises hand-typed values
