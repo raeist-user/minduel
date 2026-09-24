@@ -24,6 +24,34 @@ const generateToken = (userId) => {
   });
 };
 
+
+// Verifies the logged-in user's password for sensitive actions (change
+// username/email/password). Wrong guesses feed the SAME per-account lockout the
+// login uses, so a stolen session token can't be used to brute-force the
+// password through these endpoints. Returns { ok: true, user } or
+// { ok: false, status, body } for the caller to send.
+const verifyPasswordForSensitiveAction = async (userId, password, extraSelect = '') => {
+  const user = await User.findById(userId).select(`+password +failedLoginAttempts +lockUntil ${extraSelect}`.trim());
+  if (!user) return { ok: false, status: 404, body: { message: 'Account not found' } };
+
+  if (user.isLocked) {
+    const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+    return {
+      ok: false,
+      status: 429,
+      body: { message: `Too many failed attempts. Try again in ${minutesLeft} minute(s).` },
+    };
+  }
+
+  if (!(await user.comparePassword(password))) {
+    await user.registerFailedLogin();
+    return { ok: false, status: 401, body: { message: 'Password is incorrect', field: 'password' } };
+  }
+
+  await user.resetFailedLogins();
+  return { ok: true, user };
+};
+
 // @route   POST /api/auth/register
 // @access  Public
 const register = async (req, res, next) => {
@@ -311,6 +339,134 @@ const getAvatar = async (req, res, next) => {
   }
 };
 
+// ---------- Change username (requires password) ----------
+// @route   PATCH /api/auth/username
+// @access  Private
+const changeUsername = async (req, res, next) => {
+  try {
+    const newUsername = String(req.body.newUsername || '').trim();
+    const password = String(req.body.password || '');
+
+    if (!newUsername || !password) {
+      return res.status(400).json({ message: 'New username and your password are required' });
+    }
+    if (!USERNAME_REGEX.test(newUsername)) {
+      return res.status(400).json({
+        message: 'Username must be 3-20 characters: letters, numbers and underscores only',
+      });
+    }
+
+    // Verify the password FIRST, so this endpoint can't be used by someone
+    // holding a stolen session token to probe which usernames are taken.
+    const check = await verifyPasswordForSensitiveAction(req.user._id, password, '+previousUsernames');
+    if (!check.ok) return res.status(check.status).json(check.body);
+    const user = check.user;
+
+    if (newUsername === user.username) {
+      return res.status(400).json({ message: 'That is already your username' });
+    }
+
+    // Cooldown. Case-only changes (neo -> Neo) are always allowed since they
+    // don't create a new identity.
+    const caseOnlyChange = newUsername.toLowerCase() === user.username.toLowerCase();
+    if (!caseOnlyChange && user.usernameChangedAt) {
+      const nextAllowed = new Date(
+        user.usernameChangedAt.getTime() + User.USERNAME_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+      );
+      if (nextAllowed > new Date()) {
+        const daysLeft = Math.ceil((nextAllowed - Date.now()) / (24 * 60 * 60 * 1000));
+        return res.status(429).json({
+          message: `You can change your username again in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.`,
+          field: 'username',
+          retryAfterDays: daysLeft,
+        });
+      }
+    }
+
+    // Taken by someone ELSE? (their own old casing doesn't count as taken)
+    if (!caseOnlyChange) {
+      const clash = await User.exists({ ...usernameQuery(newUsername), _id: { $ne: user._id } });
+      if (clash) {
+        return res.status(409).json({ message: 'That username is already taken', field: 'username' });
+      }
+    }
+
+    const oldUsername = user.username;
+    user.username = newUsername;
+    if (!caseOnlyChange) {
+      user.usernameChangedAt = new Date();
+      user.previousUsernames = [...(user.previousUsernames || []), oldUsername].slice(-10);
+    }
+    // If the display name was just the old username (the default at signup),
+    // keep it in sync so the person doesn't keep showing under the old name.
+    if (user.displayName === oldUsername) user.displayName = newUsername;
+
+    try {
+      await user.save();
+    } catch (err) {
+      if (err && err.code === 11000) {
+        return res.status(409).json({ message: 'That username is already taken', field: 'username' });
+      }
+      throw err;
+    }
+
+    res.status(200).json({ user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------- Change email (requires password) ----------
+// @route   PATCH /api/auth/email
+// @access  Private
+//
+// TODO(email-verification): once email-code verification exists, this should
+// stop applying the change directly. Instead: check the password, store the
+// new address as `pendingEmail` with a hashed 6-digit code + expiry, email the
+// code TO THE NEW ADDRESS, and only swap `email` in a second call
+// (POST /email/confirm) after the code is entered. The password check and the
+// availability check below stay exactly as they are.
+const changeEmail = async (req, res, next) => {
+  try {
+    const newEmail = String(req.body.newEmail || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+
+    if (!newEmail || !password) {
+      return res.status(400).json({ message: 'New email and your password are required' });
+    }
+    if (!EMAIL_REGEX.test(newEmail)) {
+      return res.status(400).json({ message: 'Please provide a valid email', field: 'email' });
+    }
+
+    const check = await verifyPasswordForSensitiveAction(req.user._id, password);
+    if (!check.ok) return res.status(check.status).json(check.body);
+    const user = check.user;
+
+    if (newEmail === user.email) {
+      return res.status(400).json({ message: 'That is already your email' });
+    }
+
+    const clash = await User.exists({ email: newEmail, _id: { $ne: user._id } });
+    if (clash) {
+      return res.status(409).json({ message: 'An account with that email already exists', field: 'email' });
+    }
+
+    user.email = newEmail;
+    try {
+      await user.save();
+    } catch (err) {
+      if (err && err.code === 11000) {
+        return res.status(409).json({ message: 'An account with that email already exists', field: 'email' });
+      }
+      throw err;
+    }
+
+    res.status(200).json({ user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // @route   PATCH /api/auth/password
 // @access  Private
 const changePassword = async (req, res, next) => {
@@ -320,17 +476,23 @@ const changePassword = async (req, res, next) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: 'Current and new password are required' });
     }
-    if (newPassword.length < 6) {
+    if (String(newPassword).length < 6) {
       return res.status(400).json({ message: 'New password must be at least 6 characters' });
     }
 
-    const user = await User.findById(req.user._id).select('+password');
-    const matches = await user.comparePassword(currentPassword);
-    if (!matches) {
-      return res.status(401).json({ message: 'Current password is incorrect' });
+    const check = await verifyPasswordForSensitiveAction(req.user._id, String(currentPassword));
+    if (!check.ok) {
+      // keep the message this page already shows for a wrong password
+      if (check.status === 401) check.body.message = 'Current password is incorrect';
+      return res.status(check.status).json(check.body);
+    }
+    const user = check.user;
+
+    if (String(newPassword) === String(currentPassword)) {
+      return res.status(400).json({ message: 'New password must be different from your current one' });
     }
 
-    user.password = newPassword; // pre-save hook re-hashes
+    user.password = String(newPassword); // pre-save hook re-hashes
     await user.save();
 
     res.status(200).json({ message: 'Password updated' });
@@ -441,6 +603,8 @@ module.exports = {
   removeAvatar,
   getAvatar,
   changePassword,
+  changeUsername,
+  changeEmail,
   forgotPassword,
   resetPassword,
 };

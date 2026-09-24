@@ -3,6 +3,10 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 const MAX_LOGIN_ATTEMPTS = 5;
+// Players can change their username, but not constantly: once opponents see
+// names in live duels and on leaderboards, rapid renaming enables impersonation
+// and makes match history confusing.
+const USERNAME_CHANGE_COOLDOWN_DAYS = 14;
 const LOCK_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
 const userSchema = new mongoose.Schema(
@@ -70,6 +74,12 @@ const userSchema = new mongoose.Schema(
       default: {},
     },
 
+    // --- Account changes ---
+    usernameChangedAt: { type: Date },      // for the rename cooldown
+    // Kept so old names can't be sniped instantly and support can trace
+    // "who was @x last week". Newest last, capped in the controller.
+    previousUsernames: { type: [String], default: [], select: false },
+
     // --- Security: password reset ---
     resetPasswordToken: { type: String, select: false },
     resetPasswordExpires: { type: Date, select: false },
@@ -117,6 +127,19 @@ userSchema.methods.toSafeObject = function () {
   return obj;
 };
 
+// What OTHER players are allowed to see (opponent card, leaderboard, match
+// history). Deliberately an allowlist: adding a new private field to the schema
+// later can never leak by accident.
+userSchema.methods.toPublicObject = function () {
+  return {
+    _id: this._id,
+    username: this.username,
+    displayName: this.displayName,
+    avatarUrl: this.avatarUrl,
+    rating: this.rating,
+  };
+};
+
 // --- Account lockout helpers ---
 userSchema.virtual('isLocked').get(function () {
   return !!(this.lockUntil && this.lockUntil > Date.now());
@@ -156,5 +179,6 @@ userSchema.methods.createPasswordResetToken = function () {
 
 const User = mongoose.model('User', userSchema);
 User.MAX_LOGIN_ATTEMPTS = MAX_LOGIN_ATTEMPTS;
+User.USERNAME_CHANGE_COOLDOWN_DAYS = USERNAME_CHANGE_COOLDOWN_DAYS;
 
 module.exports = User;

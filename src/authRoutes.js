@@ -10,6 +10,8 @@ const {
   removeAvatar,
   getAvatar,
   changePassword,
+  changeUsername,
+  changeEmail,
   forgotPassword,
   resetPassword,
 } = require('./authController');
@@ -78,7 +80,19 @@ router.put(
 );
 router.delete('/avatar', protect, removeAvatar);
 router.get('/avatar/:id', getAvatar);
-router.patch('/password', protect, changePassword);
+// Username/email changes take the password, so they are brute-force targets for
+// anyone holding a stolen session. Tight limit, keyed per IP.
+const accountChangeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: { message: 'Too many attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.patch('/password', protect, accountChangeLimiter, changePassword);
+router.patch('/username', protect, accountChangeLimiter, changeUsername);
+router.patch('/email', protect, accountChangeLimiter, changeEmail);
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', forgotPasswordLimiter, resetPassword);
 
