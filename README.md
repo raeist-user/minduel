@@ -58,6 +58,20 @@ public/home.html                # nav bar, profile dropdown, personalization + a
 - **Password reset tokens**: random 32-byte token, only its SHA-256 hash is
   stored in the DB, expires after 1 hour, single-use.
 
+## Profile pictures
+- The browser crops the chosen photo to a centered square, resizes it to 256x256
+  and re-encodes it as JPEG (about 15-45 KB), which also strips EXIF/GPS data. The
+  server never receives the original.
+- The server re-checks the file's leading bytes (JPEG/PNG/WebP only; SVG and
+  HTML are refused since they can carry scripts), enforces a 150 KB cap, and
+  stores the bytes in MongoDB (`avatarData`, hidden from normal queries).
+- Stored in the database rather than on disk because Render's disk is wiped on
+  every deploy. If photos ever become large or numerous, move them to S3 or
+  Cloudinary and keep only the URL in `avatarUrl`. Nothing else has to change.
+- No photo -> the UI shows the user's initial on one fixed brand color
+  (`#A3E635`). Avatar background colors were removed; old `avatarColor` values
+  still in the database are harmless and ignored.
+
 ## Email (password reset)
 
 **Why reset emails might not arrive:** if `SMTP_HOST`, `SMTP_USER` and `SMTP_PASS`
@@ -95,7 +109,10 @@ to the right place (e.g. `https://minduel.onrender.com`).
 | POST | `/api/auth/register` | — | `{ username, email, password }`. Username: 3-20 chars, letters/numbers/underscore. 409 responses include `field` (`username` or `email`). |
 | POST | `/api/auth/login` | — | `{ emailOrUsername, password }` |
 | GET | `/api/auth/me` | Bearer token | current user |
-| PATCH | `/api/auth/profile` | Bearer token | `{ displayName?, avatarColor? }` |
+| PATCH | `/api/auth/profile` | Bearer token | `{ displayName? }` |
+| PUT | `/api/auth/avatar` | Bearer token | Body is the **raw image bytes** (`Content-Type: image/jpeg`, `image/png` or `image/webp`), max 150 KB. Verified by file header, not by the header/extension. 20 uploads/hour per IP. Returns `{ user }`. |
+| DELETE | `/api/auth/avatar` | Bearer token | Removes the profile picture. Returns `{ user }`. |
+| GET | `/api/auth/avatar/:id` | — | Serves a user's picture (public, cached 24h). 404 if none. |
 | PATCH | `/api/auth/password` | Bearer token | `{ currentPassword, newPassword }` |
 | POST | `/api/auth/forgot-password` | — | `{ email }` → sends reset email |
 | POST | `/api/auth/reset-password` | — | `{ token, password }` |
