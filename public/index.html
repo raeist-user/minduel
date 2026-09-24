@@ -4,6 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Minduel — Sign in</title>
+<script>
+    // Already signed in? Leave before the login form ever paints. replace()
+    // (not href) so this page never sits in the history stack either.
+    if (localStorage.getItem('minduel_token')) {
+        document.documentElement.style.display = 'none';
+        window.location.replace('/home.html');
+    }
+    // Back/forward cache can restore this page after logging in elsewhere in the tab
+    window.addEventListener('pageshow', (e) => {
+        if (e.persisted && localStorage.getItem('minduel_token')) window.location.replace('/home.html');
+    });
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -123,10 +135,6 @@
 </div>
 
 <script>
-    if (localStorage.getItem('minduel_token')) {
-        window.location.href = '/home.html';
-    }
-
     // Deep-link support: /index.html?tab=register or ?reset=success
     const params = new URLSearchParams(window.location.search);
     if (params.get('tab') === 'register') switchTab('register');
@@ -198,7 +206,7 @@
     function onAuthSuccess(data) {
         localStorage.setItem('minduel_token', data.token);
         localStorage.setItem('minduel_user', JSON.stringify(data.user));
-        window.location.href = '/home.html';
+        window.location.replace('/home.html');
     }
 
     // ---------- Live availability check (register form) ----------
