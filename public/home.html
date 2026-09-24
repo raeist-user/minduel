@@ -70,8 +70,11 @@
             <span class="text-base font-semibold tracking-tight">Minduel</span>
         </div>
 
-        <!-- profile + rating, rating sits to the right of the profile -->
+        <!-- rating on the left, profile on the far right -->
         <div class="flex items-center gap-2">
+            <div id="nav-rating" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border-color bg-pill-bg text-sm font-bold whitespace-nowrap" title="Your rating">
+                <span id="nav-rating-num" class="text-accent-green">1000</span><span class="text-text-secondary font-semibold">pts</span>
+            </div>
             <div class="relative">
                 <button id="profile-btn" onclick="toggleDropdown()" class="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border border-border-color bg-pill-bg hover:border-accent-green/50 transition-colors duration-150">
                     <span id="nav-avatar" class="avatar w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold flex-shrink-0">?</span>
@@ -81,14 +84,14 @@
                     <button onclick="openProfile()" class="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm font-medium hover:bg-white/5 transition-colors duration-150">
                         <i data-lucide="user" class="w-4 h-4 text-text-secondary shrink-0"></i>Profile
                     </button>
+                    <a id="staff-link" href="/admin.html" class="hidden w-full items-center gap-2.5 px-4 py-3 text-left text-sm font-medium hover:bg-white/5 transition-colors duration-150">
+                        <i data-lucide="shield" class="w-4 h-4 text-text-secondary shrink-0"></i><span id="staff-link-label">Moderation</span>
+                    </a>
                     <div class="h-px bg-border-color"></div>
                     <button onclick="logout()" class="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm font-medium text-red-400 hover:bg-white/5 transition-colors duration-150">
                         <i data-lucide="log-out" class="w-4 h-4 shrink-0"></i>Log out
                     </button>
                 </div>
-            </div>
-            <div id="nav-rating" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border-color bg-pill-bg text-sm font-bold whitespace-nowrap" title="Your rating">
-                <span id="nav-rating-num" class="text-accent-green">1000</span><span class="text-text-secondary font-semibold">pts</span>
             </div>
         </div>
     </nav>
@@ -115,7 +118,10 @@
             <div class="flex items-center gap-4 mb-8">
                 <div id="profile-avatar-big" class="avatar w-16 h-16 rounded-full overflow-hidden flex items-center justify-center text-xl font-bold flex-shrink-0">?</div>
                 <div class="min-w-0">
-                    <div id="profile-display-name" class="text-lg font-bold truncate">...</div>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div id="profile-display-name" class="text-lg font-bold truncate">...</div>
+                        <span id="profile-badge" class="shrink-0"></span>
+                    </div>
                     <!-- Username only (no email) + copy button -->
                     <div class="flex items-center gap-1.5 text-xs text-text-secondary min-w-0">
                         <span class="truncate">@<span id="profile-username">...</span></span>
@@ -167,8 +173,27 @@
     </div>
 </div>
 
+<!-- TERMS MODAL: shown to accounts that haven't accepted the current Terms/age confirmation yet -->
+<div id="terms-modal" class="hidden fixed inset-0 z-[110] bg-black/85 flex items-center justify-center p-5">
+    <div class="w-full max-w-[380px] bg-card-bg border border-border-color rounded-2xl p-5">
+        <div class="text-base font-bold mb-1">Before you continue</div>
+        <p class="text-xs text-text-secondary mb-4">Minduel now has Terms of Service and a Privacy Policy. Please confirm to keep playing.</p>
+        <label class="flex items-start gap-3 mb-4 cursor-pointer">
+            <input id="terms-check" type="checkbox" class="mt-0.5 w-4 h-4 shrink-0 accent-[#A3E635] cursor-pointer">
+            <span class="text-xs leading-relaxed text-text-secondary">I am at least 13 years old and I agree to the
+                <a href="/terms.html" target="_blank" rel="noopener" class="text-accent-green underline">Terms of Service</a> and
+                <a href="/privacy.html" target="_blank" rel="noopener" class="text-accent-green underline">Privacy Policy</a>.</span>
+        </label>
+        <div id="terms-error" class="hidden text-xs text-red-400 mb-3"></div>
+        <button onclick="acceptTerms()" id="terms-accept-btn"
+            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)] mb-2">Continue</button>
+        <button onclick="logout()" class="btn-press w-full text-xs font-semibold text-text-secondary hover:text-text-primary py-2 transition-colors duration-150">Log out instead</button>
+    </div>
+</div>
+
 <script>
-    const token = localStorage.getItem('minduel_token');
+    // let (not const): changing your password issues a fresh token for this device.
+    let token = localStorage.getItem('minduel_token');
     if (!token) window.location.href = '/index.html';
 
     let currentUser = null;
@@ -176,9 +201,11 @@
     const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
     const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
-    function sessionExpired() {
+    // `notice` is shown on the sign-in page (e.g. why the person was signed out).
+    function sessionExpired(notice) {
         localStorage.removeItem('minduel_token');
         localStorage.removeItem('minduel_user');
+        if (notice) sessionStorage.setItem('minduel_notice', notice);
         window.location.href = '/index.html';
     }
 
@@ -195,8 +222,18 @@
         // only an expired/invalid session does. The server marks password errors with `field`.
         let data = {};
         try { data = await res.json(); } catch (_) {}
+        // Banned or suspended: the server blocks every call, so end the session and say why.
+        if (res.status === 403 && (data.code === 'BANNED' || data.code === 'SUSPENDED')) {
+            let msg = data.message;
+            if (data.code === 'SUSPENDED' && data.until) {
+                msg += ' It ends ' + new Date(data.until).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + '.';
+            }
+            sessionExpired(msg);
+            throw new Error(data.message);
+        }
         if (res.status === 401 && data.field !== 'password' && !/password is incorrect/i.test(data.message || '')) {
-            sessionExpired();
+            // SESSION_REVOKED = password was changed/reset elsewhere
+            sessionExpired(data.code === 'SESSION_REVOKED' ? data.message : '');
             throw new Error('Session expired');
         }
         if (!res.ok) {
@@ -230,9 +267,34 @@
         }
     }
 
+    // Discord-style staff badge. `badge` comes from the server ("admin",
+    // "moderator" or null). Everything in here is a fixed string, never user text.
+    const BADGE_ICONS = {
+        admin: '<path d="M3 18h18M4 18 3 7l5 4 4-7 4 7 5-4-1 11"/>',
+        moderator: '<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/>',
+    };
+    const BADGES = {
+        admin: { label: 'Admin', cls: 'text-amber-300 bg-amber-300/10 border-amber-300/30' },
+        moderator: { label: 'Mod', cls: 'text-sky-300 bg-sky-300/10 border-sky-300/30' },
+    };
+    function badgeHTML(badge) {
+        const b = BADGES[badge];
+        if (!b) return '';
+        return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide ${b.cls}" title="${b.label === 'Mod' ? 'Moderator' : 'Administrator'}">` +
+            `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${BADGE_ICONS[badge]}</svg>${b.label}</span>`;
+    }
+
     function renderUser(user) {
         currentUser = user;
         const name = user.displayName || user.username;
+
+        document.getElementById('profile-badge').innerHTML = badgeHTML(user.badge);
+        const staffLink = document.getElementById('staff-link');
+        const isStaff = user.role === 'admin' || user.role === 'moderator';
+        staffLink.classList.toggle('hidden', !isStaff);
+        staffLink.classList.toggle('flex', isStaff);
+        document.getElementById('staff-link-label').textContent = user.role === 'admin' ? 'Admin panel' : 'Moderation';
+        document.getElementById('terms-modal').classList.toggle('hidden', !user.needsTerms);
 
         setAvatar(document.getElementById('nav-avatar'), user);
         document.getElementById('nav-name').textContent = name;
@@ -244,6 +306,30 @@
         // Email is intentionally NOT shown here. It lives under Account.
         document.getElementById('profile-username').textContent = user.username;
         document.getElementById('profile-rating').textContent = `${user.rating} pts`;
+    }
+
+    async function acceptTerms() {
+        const err = document.getElementById('terms-error');
+        err.classList.add('hidden');
+        if (!document.getElementById('terms-check').checked) {
+            err.textContent = 'Please tick the box to continue.';
+            err.classList.remove('hidden');
+            return;
+        }
+        setBusy('terms-accept-btn', true, 'Continue', 'Saving...');
+        try {
+            const data = await authedFetch('/api/auth/accept-terms', {
+                method: 'POST',
+                body: JSON.stringify({ acceptTerms: true }),
+            });
+            renderUser(data.user);
+            saveLocalUser(data.user);
+        } catch (e) {
+            err.textContent = e.message;
+            err.classList.remove('hidden');
+        } finally {
+            setBusy('terms-accept-btn', false, 'Continue', 'Saving...');
+        }
     }
 
     function saveLocalUser(user) {
@@ -317,8 +403,7 @@
     }
 
     const CATEGORIES = [
-        { id: 'personalize', icon: 'palette', label: 'Personalize', desc: 'Profile picture & display name' },
-        { id: 'username', icon: 'at-sign', label: 'Username', desc: 'Change your @username' },
+        { id: 'personalize', icon: 'palette', label: 'Personalize', desc: 'Photo, display name & username' },
         { id: 'account', icon: 'lock', label: 'Account', desc: 'Email & password' },
     ];
 
@@ -342,7 +427,6 @@
         document.getElementById('profile-content').classList.remove('hidden');
         const body = document.getElementById('profile-body');
         if (cat === 'personalize') { body.innerHTML = buildPersonalizeHTML(); refreshPzPreview(); }
-        else if (cat === 'username') { body.innerHTML = buildUsernameHTML(); }
         else { body.innerHTML = buildAccountHTML(); fillAccountEmail(); }
         lucide.createIcons();
     }
@@ -404,13 +488,15 @@
             <label class="text-xs text-text-secondary block mb-2">Display name</label>
             <input id="pz-displayname" type="text" maxlength="30" value="${escapeHtml(currentUser.displayName || currentUser.username)}"
                 class="field w-full rounded-lg px-3 py-2.5 text-sm">
-            <p class="text-[11px] text-text-muted mt-2">Shown to opponents. Your @username stays the same.</p>
+            <p class="text-[11px] text-text-muted mt-2 mb-3">Shown to opponents. Your @username is changed separately below.</p>
+            <div id="pz-error" class="hidden text-xs mb-3"></div>
+            <button onclick="savePersonalize()" id="pz-save-btn"
+                class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+                Save name
+            </button>
         </div>
-        <div id="pz-error" class="hidden text-xs mb-3"></div>
-        <button onclick="savePersonalize()" id="pz-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
-            Save name
-        </button>`;
+
+        ${buildUsernameHTML()}`;
     }
 
     function refreshPzPreview() {
@@ -654,7 +740,7 @@
         }
     }
 
-    // ── Username change (needs password) ─────────────────────
+    // ── Username change (card shown inside Personalize; needs password) ──
     let unSeq = 0;
     let unOk = false;
 
@@ -671,13 +757,13 @@
             <p id="un-status" class="text-[11px] mt-1.5 mb-3 min-h-[16px] text-text-muted">3-20 letters, numbers or underscores.</p>
 
             <label class="text-xs text-text-secondary block mb-1">Confirm with your password</label>
-            <input id="un-pass" type="password" autocomplete="current-password" class="field w-full rounded-lg px-3 py-2.5 text-sm">
-        </div>
-        <div id="un-error" class="hidden text-xs mb-3"></div>
-        <button onclick="saveUsername()" id="un-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
-            Update username
-        </button>`;
+            <input id="un-pass" type="password" autocomplete="current-password" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-3">
+            <div id="un-error" class="hidden text-xs mb-3"></div>
+            <button onclick="saveUsername()" id="un-save-btn"
+                class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+                Update username
+            </button>
+        </div>`;
     }
 
     function setUnStatus(kind, msg) {
@@ -884,11 +970,16 @@
 
         setBusy('pw-save-btn', true, 'Update password', 'Updating...');
         try {
-            await authedFetch('/api/auth/password', {
+            const data = await authedFetch('/api/auth/password', {
                 method: 'PATCH',
                 body: JSON.stringify({ currentPassword: current, newPassword: next }),
             });
-            showMsg('pw-error', 'Password updated.', 'ok');
+            // Every other device was just signed out; this one gets a fresh token.
+            if (data.token) {
+                token = data.token;
+                localStorage.setItem('minduel_token', data.token);
+            }
+            showMsg('pw-error', 'Password updated. Other devices have been signed out.', 'ok');
             document.getElementById('pw-current').value = '';
             document.getElementById('pw-new').value = '';
             document.getElementById('pw-confirm').value = '';
