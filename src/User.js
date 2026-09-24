@@ -127,6 +127,10 @@ const userSchema = new mongoose.Schema(
     failedLoginAttempts: { type: Number, default: 0, select: false },
     lockUntil: { type: Date, select: false },
 
+    // Presence: refreshed by authenticated requests (see authMiddleware). Only
+    // ever shown to accepted friends.
+    lastSeenAt: { type: Date },
+
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
@@ -172,6 +176,7 @@ userSchema.methods.toSafeObject = function () {
   delete obj.tokenVersion;
   delete obj.restriction;
   delete obj.previousUsernames;
+  delete obj.lastSeenAt;
   delete obj.__v;
   obj.role = this.role; // normalised value
   obj.badge = badgeFor(this.role);
