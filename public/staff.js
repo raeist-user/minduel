@@ -54,7 +54,7 @@ window.Staff = (function () {
         if (name === 'activity' && !isAdmin) name = 'accounts';
         $('tab-accounts').classList.toggle('hidden', name !== 'accounts');
         $('tab-activity').classList.toggle('hidden', name !== 'activity');
-        const on = 'flex-1 py-2 rounded-lg text-sm font-semibold transition-colors duration-150 bg-[#333] text-accent-green';
+        const on = 'flex-1 py-2 rounded-lg text-sm font-semibold transition-colors duration-150 bg-[#333] text-accent';
         const off = 'flex-1 py-2 rounded-lg text-sm font-semibold transition-colors duration-150 text-text-secondary hover:text-text-primary';
         $('tab-btn-accounts').className = name === 'accounts' ? on : off;
         $('tab-btn-activity').className = name === 'activity' ? on : off;
@@ -70,7 +70,7 @@ window.Staff = (function () {
             const active = state.filter === id;
             box.append(h('button', {
                 class: 'btn-press shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors duration-150 ' +
-                    (active ? 'bg-accent-green text-app-bg border-accent-green' : 'bg-pill-bg text-text-secondary border-border-color hover:border-white/30'),
+                    (active ? 'bg-accent text-app-bg border-accent' : 'bg-pill-bg text-text-secondary border-border-color hover:border-white/30'),
                 onclick: () => { state.filter = id; renderChips(); loadUsers(true); },
             }, label));
         });
@@ -116,7 +116,7 @@ window.Staff = (function () {
 
     function userRow(u) {
         return h('button', {
-            class: 'btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3 text-left hover:border-accent-green/50 transition-colors duration-150',
+            class: 'btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3 text-left hover:border-accent/50 transition-colors duration-150',
             onclick: () => openSheet(u._id),
         },
             avatarEl(u, 'w-10 h-10', 'text-sm'),
@@ -125,7 +125,7 @@ window.Staff = (function () {
                     h('span', { class: 'text-sm font-semibold truncate' }, u.displayName || u.username),
                     badgeEl(u.badge), statusPill(u)),
                 h('span', { class: 'block text-xs text-text-secondary truncate' }, '@' + u.username + (u.email ? '  ·  ' + u.email : ''))),
-            h('span', { class: 'text-xs font-semibold text-accent-green shrink-0' }, u.rating + ' pts'));
+            h('span', { class: 'text-xs font-semibold text-accent shrink-0' }, u.rating + ' pts'));
     }
 
     // ── Account sheet ────────────────────────────────────────
@@ -191,7 +191,7 @@ window.Staff = (function () {
         }
 
         const msg = h('div', { class: 'hidden text-xs mb-3' });
-        const showMsg = (text, ok) => { msg.textContent = text; msg.className = 'text-xs mb-3 ' + (ok ? 'text-accent-green' : 'text-red-400'); };
+        const showMsg = (text, ok) => { msg.textContent = text; msg.className = 'text-xs mb-3 ' + (ok ? 'text-online' : 'text-red-400'); };
 
         const run = async (btn, url, options, okText) => {
             btn.disabled = true; btn.style.opacity = '.6';
@@ -244,7 +244,7 @@ window.Staff = (function () {
             }
 
             if (u.status !== 'active') {
-                const lift = h('button', { class: 'btn-press w-full font-bold text-sm py-3 rounded-xl bg-accent-green text-app-bg mt-3' },
+                const lift = h('button', { class: 'btn-press w-full font-bold text-sm py-3 rounded-xl bg-accent text-app-bg mt-3' },
                     u.status === 'banned' ? 'Lift ban' : 'Lift suspension');
                 armButton(lift, 'Tap again to confirm', () => run(lift, `/api/admin/users/${u._id}/restore`, { method: 'POST', body: JSON.stringify({}) }));
                 actions.append(lift);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Minduel — Sign in</title>
+<title>Aptiks — Sign in</title>
 <script>
     // Already signed in? Leave before the login form ever paints. replace()
     // (not href) so this page never sits in the history stack either.
@@ -27,7 +27,8 @@
                     'app-bg': '#0D0D0D',
                     'card-bg': '#1A1A1A',
                     'input-bg': '#1A1A1A',
-                    'accent-green': '#A3E635',
+                    'accent': '#E2B714',       // Monkeytype yellow
+                    'online': '#4ADE80',       // presence dots + success text
                     'text-primary': '#FFFFFF',
                     'text-secondary': '#888888',
                     'border-color': '#2A2A2A'
@@ -41,7 +42,7 @@
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: #121212; }
     ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 4px; }
-    .input-glow:focus { box-shadow: 0 0 0 1px #A3E635; border-color: #A3E635; }
+    .input-glow:focus { box-shadow: 0 0 0 1px #E2B714; border-color: #E2B714; }
     .form-panel { display: none; }
     .form-panel.active { display: block; }
 </style>
@@ -53,9 +54,9 @@
     <div class="text-left mb-10 mt-8 sm:mt-0 max-w-[400px] w-full mx-auto">
         <div class="flex items-center gap-3 mb-6">
             <div class="w-8 h-8 rounded bg-card-bg flex items-center justify-center border border-border-color">
-                <div class="w-4 h-4 bg-accent-green rounded-sm transform rotate-45"></div>
+                <div class="w-4 h-4 bg-accent rounded-sm transform rotate-45"></div>
             </div>
-            <h1 class="text-xl font-bold tracking-wide text-text-primary">MINDUEL</h1>
+            <h1 class="text-xl font-bold tracking-wide text-text-primary">APTIKS</h1>
         </div>
         <h2 class="text-3xl font-bold tracking-tight text-text-primary mb-2">Ready to duel?</h2>
         <p class="text-sm text-text-secondary">Live 1v1 analytical problem-solving. Log in or create an account to jump into a match.</p>
@@ -64,13 +65,13 @@
     <div class="max-w-[400px] w-full mx-auto">
         <div class="flex bg-card-bg border border-border-color rounded-xl p-1 gap-1 mb-6">
             <button id="tab-login" onclick="switchTab('login')"
-                class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-150 bg-[#242424] text-accent-green">Log in</button>
+                class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-150 bg-[#242424] text-accent">Log in</button>
             <button id="tab-register" onclick="switchTab('register')"
                 class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-150 text-text-secondary hover:text-text-primary">Register</button>
         </div>
 
         <div id="form-error" class="hidden text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg px-3 py-2.5 mb-4"></div>
-        <div id="form-success" class="hidden text-xs text-accent-green bg-accent-green/10 border border-accent-green/30 rounded-lg px-3 py-2.5 mb-4"></div>
+        <div id="form-success" class="hidden text-xs text-accent bg-accent/10 border border-accent/30 rounded-lg px-3 py-2.5 mb-4"></div>
 
         <!-- Login -->
         <form id="panel-login" class="form-panel active" onsubmit="handleLogin(event)">
@@ -85,10 +86,10 @@
                     class="w-full bg-input-bg border border-border-color text-text-primary text-base rounded-xl px-4 py-3.5 outline-none transition-all duration-200 input-glow placeholder:text-text-secondary/30 tracking-widest font-mono">
             </div>
             <div class="text-right mb-6">
-                <a href="/forgot-password.html" class="text-[11px] font-medium text-text-secondary hover:text-accent-green transition-colors duration-200 uppercase tracking-widest">Forgot password?</a>
+                <a href="/forgot-password.html" class="text-[11px] font-medium text-text-secondary hover:text-accent transition-colors duration-200 uppercase tracking-widest">Forgot password?</a>
             </div>
             <button type="submit" id="login-submit"
-                class="w-full bg-accent-green text-app-bg font-bold py-4 rounded-xl hover:bg-opacity-90 transition-all duration-200 shadow-[0_0_15px_rgba(163,230,53,0.3)]">
+                class="w-full bg-accent text-app-bg font-bold py-4 rounded-xl hover:bg-opacity-90 transition-all duration-200 shadow-[0_0_15px_rgba(226,183,20,0.3)]">
                 <span id="login-btn-text">LOG IN</span>
             </button>
         </form>
@@ -117,20 +118,20 @@
                 <p class="text-[11px] text-text-secondary mt-2">At least 6 characters.</p>
             </div>
             <label class="flex items-start gap-3 mb-8 pl-1 cursor-pointer">
-                <input id="reg-terms" type="checkbox" required class="mt-0.5 w-4 h-4 shrink-0 accent-[#A3E635] cursor-pointer">
+                <input id="reg-terms" type="checkbox" required class="mt-0.5 w-4 h-4 shrink-0 accent-[#E2B714] cursor-pointer">
                 <span class="text-[12px] leading-relaxed text-text-secondary">I am at least 13 years old and I agree to the
-                    <a href="/terms.html" target="_blank" rel="noopener" class="text-accent-green underline">Terms of Service</a> and
-                    <a href="/privacy.html" target="_blank" rel="noopener" class="text-accent-green underline">Privacy Policy</a>.</span>
+                    <a href="/terms.html" target="_blank" rel="noopener" class="text-accent underline">Terms of Service</a> and
+                    <a href="/privacy.html" target="_blank" rel="noopener" class="text-accent underline">Privacy Policy</a>.</span>
             </label>
             <button type="submit" id="register-submit"
-                class="w-full bg-accent-green text-app-bg font-bold py-4 rounded-xl hover:bg-opacity-90 transition-all duration-200 shadow-[0_0_15px_rgba(163,230,53,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
+                class="w-full bg-accent text-app-bg font-bold py-4 rounded-xl hover:bg-opacity-90 transition-all duration-200 shadow-[0_0_15px_rgba(226,183,20,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
                 <span id="register-btn-text">CREATE ACCOUNT</span>
             </button>
         </form>
     </div>
 
     <footer class="text-center pb-6 pt-10">
-        <p class="text-[10px] text-text-secondary/60 tracking-wide">© 2026 Minduel. All rights reserved.</p>
+        <p class="text-[10px] text-text-secondary/60 tracking-wide">© 2026 Aptiks. All rights reserved.</p>
     </footer>
 </div>
 
@@ -151,10 +152,10 @@
     function switchTab(name) {
         document.getElementById('tab-login').className =
             'flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-150 ' +
-            (name === 'login' ? 'bg-[#242424] text-accent-green' : 'text-text-secondary hover:text-text-primary');
+            (name === 'login' ? 'bg-[#242424] text-accent' : 'text-text-secondary hover:text-text-primary');
         document.getElementById('tab-register').className =
             'flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-150 ' +
-            (name === 'register' ? 'bg-[#242424] text-accent-green' : 'text-text-secondary hover:text-text-primary');
+            (name === 'register' ? 'bg-[#242424] text-accent' : 'text-text-secondary hover:text-text-primary');
         document.getElementById('panel-login').classList.toggle('active', name === 'login');
         document.getElementById('panel-register').classList.toggle('active', name === 'register');
         hideMessages();
@@ -228,10 +229,10 @@
         fieldState[field] = state;
         const el = fieldEls[field].status();
         const input = fieldEls[field].input();
-        const colors = { idle: 'text-text-secondary', checking: 'text-text-secondary', ok: 'text-accent-green', bad: 'text-red-400' };
+        const colors = { idle: 'text-text-secondary', checking: 'text-text-secondary', ok: 'text-accent', bad: 'text-red-400' };
         el.className = 'text-[11px] mt-2 pl-1 min-h-[16px] ' + colors[state];
         el.textContent = message;
-        input.style.borderColor = state === 'bad' ? '#F87171' : state === 'ok' ? '#A3E635' : '';
+        input.style.borderColor = state === 'bad' ? '#F87171' : state === 'ok' ? '#E2B714' : '';
     }
 
     function onFieldInput(field) {

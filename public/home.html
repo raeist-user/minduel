@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#171717">
-<title>Minduel</title>
+<title>Aptiks</title>
 <script>
     // Not signed in? Go to login before anything paints (replace: no history entry).
     if (!localStorage.getItem('minduel_token')) {
@@ -21,12 +21,13 @@
             extend: {
                 fontFamily: { sans: ['Space Grotesk', 'sans-serif'] },
                 colors: {
-                    // Lighter, Matiks-style dark theme. The accent green is unchanged.
+                    // Lighter, Matiks-style dark theme. Accent is Monkeytype yellow.
                     'app-bg': '#171717',        // page
                     'card-bg': '#252525',       // cards, tiles
                     'pill-bg': '#292929',       // small chips / pills
                     'input-bg': '#1E1E1E',      // inputs sit slightly darker than the card they're on
-                    'accent-green': '#A3E635',
+                    'accent': '#E2B714',       // Monkeytype yellow
+                    'online': '#4ADE80',       // presence dots + success text
                     'text-primary': '#FFFFFF',
                     'text-secondary': '#A2A2A2',
                     'text-muted': '#747474',
@@ -43,29 +44,29 @@
     ::-webkit-scrollbar-track { background: #171717; }
     ::-webkit-scrollbar-thumb { background: #3A3A3A; border-radius: 4px; }
     .btn-press:active { transform: scale(.97); }
-    .avatar { background-color: #A3E635; color: #171717; }
+    .avatar { background-color: #E2B714; color: #171717; }
     .avatar.has-photo { background-color: #252525; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .field { background: #1E1E1E; border: 1px solid #3A3A3A; }
-    .field:focus { outline: none; border-color: #A3E635; box-shadow: 0 0 0 1px #A3E635; }
+    .field:focus { outline: none; border-color: #E2B714; box-shadow: 0 0 0 1px #E2B714; }
     .field.bad { border-color: #F87171; box-shadow: none; }
-    .field.good { border-color: #A3E635; }
+    .field.good { border-color: #4ADE80; }
     .field:disabled { opacity: .5; }
     select.field { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A2A2A2' stroke-width='3'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
     /* Bottom nav: sits above the phone's gesture bar */
     #bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
     .nav-item { color: #747474; transition: color .15s; }
-    .nav-item.active { color: #A3E635; }
+    .nav-item.active { color: #E2B714; }
     .nav-item.active svg { stroke-width: 2.4; }
     .online-dot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 9999px; border: 2px solid #252525; }
     /* Crop stage: image is positioned by JS; the circle is the visible crop area. */
     #crop-stage { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
     #crop-stage:active { cursor: grabbing; }
     #crop-img { position: absolute; top: 0; left: 0; transform-origin: 0 0; max-width: none; pointer-events: none; }
-    #crop-ring { position: absolute; inset: 0; border-radius: 9999px; box-shadow: 0 0 0 999px rgba(23,23,23,.72); border: 2px solid #A3E635; pointer-events: none; }
+    #crop-ring { position: absolute; inset: 0; border-radius: 9999px; box-shadow: 0 0 0 999px rgba(23,23,23,.72); border: 2px solid #E2B714; pointer-events: none; }
     input[type=range].zoom { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #3A3A3A; outline: none; }
-    input[type=range].zoom::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #A3E635; cursor: pointer; }
-    input[type=range].zoom::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #A3E635; cursor: pointer; }
+    input[type=range].zoom::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #E2B714; cursor: pointer; }
+    input[type=range].zoom::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #E2B714; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -73,7 +74,7 @@
 <!-- Splash: shown until the account has loaded, so nothing flashes -->
 <div id="splash" class="fixed inset-0 z-[200] bg-app-bg flex items-center justify-center">
     <div class="w-12 h-12 rounded-xl bg-card-bg flex items-center justify-center border border-border-color animate-pulse">
-        <div class="w-6 h-6 bg-accent-green rounded-md transform rotate-45"></div>
+        <div class="w-6 h-6 bg-accent rounded-md transform rotate-45"></div>
     </div>
 </div>
 
@@ -83,16 +84,16 @@
     <header id="top-bar" class="z-40 flex-shrink-0 flex items-center justify-between px-5 h-[54px] bg-app-bg border-b border-border-color">
         <div class="flex items-center gap-2">
             <div class="w-6 h-6 rounded bg-card-bg flex items-center justify-center border border-border-color">
-                <div class="w-3 h-3 bg-accent-green rounded-sm transform rotate-45"></div>
+                <div class="w-3 h-3 bg-accent rounded-sm transform rotate-45"></div>
             </div>
-            <span class="text-base font-semibold tracking-tight">Minduel</span>
+            <span class="text-base font-semibold tracking-tight">Aptiks</span>
         </div>
         <div class="flex items-center gap-2">
             <button onclick="go('leaderboard')" class="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border-color bg-pill-bg text-sm font-bold whitespace-nowrap" title="Your rating">
-                <span id="nav-rating-num" class="text-accent-green">1000</span><span class="text-text-secondary font-semibold">pts</span>
+                <span id="nav-rating-num" class="text-accent">1000</span><span class="text-text-secondary font-semibold">pts</span>
             </button>
             <button onclick="go('messages')" aria-label="Messages" title="Messages"
-                class="btn-press relative w-9 h-9 rounded-full border border-border-color bg-pill-bg flex items-center justify-center text-text-primary hover:border-accent-green/50 transition-colors duration-150">
+                class="btn-press relative w-9 h-9 rounded-full border border-border-color bg-pill-bg flex items-center justify-center text-text-primary hover:border-accent/50 transition-colors duration-150">
                 <i data-lucide="message-square" class="w-4 h-4"></i>
                 <span id="nav-dm-badge" class="hidden absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-4 text-center"></span>
             </button>
@@ -118,7 +119,7 @@
             <section id="view-leaderboard" class="hidden">
                 <h1 class="text-3xl font-bold tracking-tight mb-1">Leaderboard</h1>
                 <p class="text-text-secondary text-sm mb-5">Top players by rating.</p>
-                <div id="lb-me" class="hidden bg-card-bg border border-accent-green/40 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between"></div>
+                <div id="lb-me" class="hidden bg-card-bg border border-accent/40 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between"></div>
                 <div id="lb-list" class="flex flex-col gap-2"></div>
                 <div id="lb-msg" class="text-sm text-text-secondary text-center py-8 hidden"></div>
             </section>
@@ -161,7 +162,7 @@
                     <div class="flex gap-2">
                         <input id="fr-username" maxlength="21" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Username"
                             class="field flex-1 min-w-0 rounded-lg px-3 py-2.5 text-sm">
-                        <button id="fr-send" class="btn-press shrink-0 bg-accent-green text-app-bg font-bold text-sm px-4 rounded-lg">Send</button>
+                        <button id="fr-send" class="btn-press shrink-0 bg-accent text-app-bg font-bold text-sm px-4 rounded-lg">Send</button>
                     </div>
                     <div id="fr-msg" class="hidden text-xs mt-2"></div>
                 </div>
@@ -173,6 +174,7 @@
                 <h1 class="text-3xl font-bold tracking-tight mb-1">Messages</h1>
                 <p class="text-text-secondary text-sm mb-5">Private chats with your friends.</p>
                 <div id="inbox-list"></div>
+                <p class="text-[11px] text-text-muted text-center mt-6">Messages are deleted automatically after a month.</p>
             </section>
 
             <!-- PLAYER PROFILE (friend / leaderboard tap) -->
@@ -196,10 +198,10 @@
                             <div class="flex items-center gap-1.5 text-xs text-text-secondary min-w-0">
                                 <span class="truncate">@<span id="profile-username">...</span></span>
                                 <button onclick="copyUsername()" aria-label="Copy username" title="Copy username"
-                                    class="btn-press shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-text-secondary hover:text-accent-green hover:bg-white/5 transition-colors duration-150">
+                                    class="btn-press shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-text-secondary hover:text-accent hover:bg-white/5 transition-colors duration-150">
                                     <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                                 </button>
-                                <span id="copy-feedback" class="hidden text-accent-green font-semibold">Copied!</span>
+                                <span id="copy-feedback" class="hidden text-accent font-semibold">Copied!</span>
                             </div>
                         </div>
                     </div>
@@ -229,7 +231,7 @@
         <div class="flex-shrink-0 border-t border-border-color px-3 pt-2.5" style="padding-bottom: calc(0.625rem + env(safe-area-inset-bottom))">
             <div id="chat-form" class="flex items-end gap-2">
                 <textarea id="chat-input" rows="1" maxlength="1000" placeholder="Message" class="field flex-1 min-w-0 rounded-2xl px-4 py-2.5 text-sm resize-none" style="max-height:128px"></textarea>
-                <button id="chat-send" aria-label="Send" class="btn-press shrink-0 w-10 h-10 rounded-full bg-accent-green text-app-bg flex items-center justify-center">
+                <button id="chat-send" aria-label="Send" class="btn-press shrink-0 w-10 h-10 rounded-full bg-accent text-app-bg flex items-center justify-center">
                     <i data-lucide="send" class="w-4 h-4"></i>
                 </button>
             </div>
@@ -270,11 +272,23 @@
     </div>
 </div>
 
+<!-- DM NOTICE: shown the first time someone opens Messages -->
+<div id="dm-notice" class="hidden fixed inset-0 z-[130] bg-black/80 flex items-center justify-center p-5">
+    <div class="w-full max-w-[380px] bg-card-bg border border-border-color rounded-2xl p-5">
+        <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="clock" class="w-4 h-4 text-accent"></i>
+            <div class="text-base font-bold">Before you start chatting</div>
+        </div>
+        <p class="text-sm text-text-secondary mb-5">To keep storage in check, messages older than a month (30 days) are deleted automatically. Save anything important elsewhere.</p>
+        <button onclick="dismissOverlay()" class="btn-press w-full py-3 rounded-xl text-sm font-bold bg-accent text-app-bg">Got it</button>
+    </div>
+</div>
+
 <!-- PASSWORD PROMPT: shown only when someone confirms a sensitive change -->
 <div id="pw-modal" class="hidden fixed inset-0 z-[120] bg-black/80 flex items-center justify-center p-5" onclick="if (event.target === this) dismissOverlay()">
     <div class="w-full max-w-[380px] bg-card-bg border border-border-color rounded-2xl p-5">
         <div class="flex items-center gap-2 mb-1">
-            <i data-lucide="lock" class="w-4 h-4 text-accent-green"></i>
+            <i data-lucide="lock" class="w-4 h-4 text-accent"></i>
             <div id="pw-title" class="text-base font-bold">Confirm it's you</div>
         </div>
         <p id="pw-desc" class="text-xs text-text-secondary mb-4">Enter your password to continue.</p>
@@ -282,7 +296,7 @@
         <div id="pw-err" class="hidden text-xs text-red-400 mb-2"></div>
         <div class="flex gap-2 mt-3">
             <button onclick="dismissOverlay()" id="pw-cancel" class="btn-press flex-1 py-3 rounded-xl text-sm font-semibold bg-pill-bg border border-border-color hover:border-white/30 transition-colors duration-150">Cancel</button>
-            <button id="pw-confirm" onclick="submitPwPrompt()" class="btn-press flex-1 py-3 rounded-xl text-sm font-bold bg-accent-green text-app-bg shadow-[0_0_15px_rgba(163,230,53,0.25)]">Confirm</button>
+            <button id="pw-confirm" onclick="submitPwPrompt()" class="btn-press flex-1 py-3 rounded-xl text-sm font-bold bg-accent text-app-bg shadow-[0_0_15px_rgba(226,183,20,0.25)]">Confirm</button>
         </div>
     </div>
 </div>
@@ -309,7 +323,7 @@
         <div id="crop-error" class="hidden text-xs text-red-400 mb-3"></div>
         <div class="flex gap-2">
             <button onclick="dismissOverlay()" id="crop-cancel" class="btn-press flex-1 py-3 rounded-xl text-sm font-semibold bg-pill-bg border border-border-color hover:border-white/30 transition-colors duration-150">Cancel</button>
-            <button onclick="confirmCrop()" id="crop-save" class="btn-press flex-1 py-3 rounded-xl text-sm font-bold bg-accent-green text-app-bg shadow-[0_0_15px_rgba(163,230,53,0.25)]">Use photo</button>
+            <button onclick="confirmCrop()" id="crop-save" class="btn-press flex-1 py-3 rounded-xl text-sm font-bold bg-accent text-app-bg shadow-[0_0_15px_rgba(226,183,20,0.25)]">Use photo</button>
         </div>
     </div>
 </div>
@@ -318,16 +332,16 @@
 <div id="terms-modal" class="hidden fixed inset-0 z-[110] bg-black/85 flex items-center justify-center p-5">
     <div class="w-full max-w-[380px] bg-card-bg border border-border-color rounded-2xl p-5">
         <div class="text-base font-bold mb-1">Before you continue</div>
-        <p class="text-xs text-text-secondary mb-4">Minduel now has Terms of Service and a Privacy Policy. Please confirm to keep playing.</p>
+        <p class="text-xs text-text-secondary mb-4">Aptiks now has Terms of Service and a Privacy Policy. Please confirm to keep playing.</p>
         <label class="flex items-start gap-3 mb-4 cursor-pointer">
-            <input id="terms-check" type="checkbox" class="mt-0.5 w-4 h-4 shrink-0 accent-[#A3E635] cursor-pointer">
+            <input id="terms-check" type="checkbox" class="mt-0.5 w-4 h-4 shrink-0 accent-[#E2B714] cursor-pointer">
             <span class="text-xs leading-relaxed text-text-secondary">I am at least 13 years old and I agree to the
-                <a href="/terms.html" target="_blank" rel="noopener" class="text-accent-green underline">Terms of Service</a> and
-                <a href="/privacy.html" target="_blank" rel="noopener" class="text-accent-green underline">Privacy Policy</a>.</span>
+                <a href="/terms.html" target="_blank" rel="noopener" class="text-accent underline">Terms of Service</a> and
+                <a href="/privacy.html" target="_blank" rel="noopener" class="text-accent underline">Privacy Policy</a>.</span>
         </label>
         <div id="terms-error" class="hidden text-xs text-red-400 mb-3"></div>
         <button onclick="acceptTerms()" id="terms-accept-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)] mb-2">Continue</button>
+            class="btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(226,183,20,0.25)] mb-2">Continue</button>
         <button onclick="logout()" class="btn-press w-full text-xs font-semibold text-text-secondary hover:text-text-primary py-2 transition-colors duration-150">Log out instead</button>
     </div>
 </div>

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Minduel app shell: one page, five bottom-nav tabs, in-app back button.
+// Aptiks app shell: one page, five bottom-nav tabs, in-app back button.
 // ─────────────────────────────────────────────────────────────
 
 // let (not const): changing your password issues a fresh token for this device.
@@ -134,7 +134,7 @@ function avatarEl(user, sizeCls, textCls, online) {
     setAvatar(av, user);
     if (online === undefined) return av;
     return h('span', { class: 'relative shrink-0 inline-block' }, av,
-        h('span', { class: 'online-dot ' + (online ? 'bg-accent-green' : 'bg-[#555]') }));
+        h('span', { class: 'online-dot ' + (online ? 'bg-online' : 'bg-[#555]') }));
 }
 
 // Staff badge: a small icon only (no text, no pill). Admin = verified seal in
@@ -186,7 +186,7 @@ function showMsg(id, text, kind) {
     const el = $(id);
     if (!el) return;
     el.textContent = text;
-    el.className = 'text-xs mb-3 ' + (kind === 'ok' ? 'text-accent-green' : 'text-red-400');
+    el.className = 'text-xs mb-3 ' + (kind === 'ok' ? 'text-online' : 'text-red-400');
 }
 function hideMsg(id) {
     const el = $(id);
@@ -289,7 +289,7 @@ function render(force) {
     else if (tab === 'friends') { renderFriends(); refreshFriends(); }
     else if (tab === 'account') renderAccount(a);
     else if (tab === 'u') loadPlayer(a);
-    else if (tab === 'messages') { if (inChat) openChat(a); else { renderInbox(); refreshDMs(); refreshFriends(); } }
+    else if (tab === 'messages') { maybeShowDmNotice(); if (inChat) openChat(a); else { renderInbox(); refreshDMs(); refreshFriends(); } }
     icons();
 }
 
@@ -450,12 +450,12 @@ function renderHomeFriends() {
     box.classList.remove('hidden');
     box.textContent = '';
     box.append(h('button', {
-        class: 'btn-press w-full text-left bg-card-bg border border-border-color rounded-2xl px-4 py-3 hover:border-accent-green/50 transition-colors duration-150',
+        class: 'btn-press w-full text-left bg-card-bg border border-border-color rounded-2xl px-4 py-3 hover:border-accent/50 transition-colors duration-150',
         onclick: () => go('friends'),
     },
         h('div', { class: 'flex items-center justify-between mb-2' },
             h('span', { class: 'text-sm font-semibold' }, online.length ? `${online.length} friend${online.length === 1 ? '' : 's'} online` : 'Friends'),
-            req ? h('span', { class: 'text-[11px] font-bold text-app-bg bg-accent-green rounded-full px-2 py-0.5' }, `${req} request${req === 1 ? '' : 's'}`) : null),
+            req ? h('span', { class: 'text-[11px] font-bold text-app-bg bg-accent rounded-full px-2 py-0.5' }, `${req} request${req === 1 ? '' : 's'}`) : null),
         online.length ? h('div', { class: 'flex -space-x-2' }, online.slice(0, 6).map((f) => avatarEl(f, 'w-8 h-8', 'text-xs'))) : null));
     icons();
 }
@@ -492,7 +492,7 @@ function renderLeaderboard(data) {
         h('div', {}, h('div', { class: 'text-[10px] text-text-muted uppercase tracking-wide' }, 'Your rank'),
             h('div', { class: 'text-xl font-bold' }, '#' + data.me.rank)),
         h('div', { class: 'text-right' }, h('div', { class: 'text-[10px] text-text-muted uppercase tracking-wide' }, 'Rating'),
-            h('div', { class: 'text-xl font-bold text-accent-green' }, String(data.me.rating))));
+            h('div', { class: 'text-xl font-bold text-accent' }, String(data.me.rating))));
 
     if (!data.players.length) {
         msg.textContent = 'No players yet.';
@@ -504,7 +504,7 @@ function renderLeaderboard(data) {
         const mine = p._id === currentUser._id;
         list.append(h('button', {
             class: 'btn-press w-full flex items-center gap-3 bg-card-bg border rounded-2xl px-4 py-3 text-left transition-colors duration-150 ' +
-                (mine ? 'border-accent-green/50' : 'border-border-color hover:border-accent-green/50'),
+                (mine ? 'border-accent/50' : 'border-border-color hover:border-accent/50'),
             onclick: () => go('u/' + p._id),
         },
             h('span', { class: 'w-7 text-center text-sm font-bold shrink-0 ' + (medal[p.rank] || 'text-text-secondary') }, String(p.rank)),
@@ -512,9 +512,9 @@ function renderLeaderboard(data) {
             h('span', { class: 'flex-1 min-w-0' },
                 h('span', { class: 'flex items-center gap-2 min-w-0' },
                     h('span', { class: 'text-sm font-semibold truncate' }, p.displayName || p.username), badgeEl(p.badge),
-                    mine ? h('span', { class: 'text-[10px] font-bold text-accent-green shrink-0' }, 'YOU') : null),
+                    mine ? h('span', { class: 'text-[10px] font-bold text-accent shrink-0' }, 'YOU') : null),
                 h('span', { class: 'block text-xs text-text-secondary truncate' }, '@' + p.username)),
-            h('span', { class: 'text-sm font-bold text-accent-green shrink-0' }, String(p.rating))));
+            h('span', { class: 'text-sm font-bold text-accent shrink-0' }, String(p.rating))));
     });
 }
 
@@ -522,14 +522,14 @@ function renderLeaderboard(data) {
 function friendRow(u, sub, right, onclick) {
     return h(onclick ? 'button' : 'div', {
         class: 'w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3 text-left ' +
-            (onclick ? 'btn-press hover:border-accent-green/50 transition-colors duration-150' : ''),
+            (onclick ? 'btn-press hover:border-accent/50 transition-colors duration-150' : ''),
         onclick,
     },
         avatarEl(u, 'w-10 h-10', 'text-sm', u.online === undefined ? undefined : u.online),
         h('span', { class: 'flex-1 min-w-0' },
             h('span', { class: 'flex items-center gap-2 min-w-0' },
                 h('span', { class: 'text-sm font-semibold truncate' }, u.displayName || u.username), badgeEl(u.badge)),
-            h('span', { class: 'block text-xs truncate ' + (u.online ? 'text-accent-green' : 'text-text-secondary') }, sub)),
+            h('span', { class: 'block text-xs truncate ' + (u.online ? 'text-online' : 'text-text-secondary') }, sub)),
         right);
 }
 function sectionTitle(text, count) {
@@ -550,7 +550,7 @@ function renderFriends() {
         incoming.forEach((r) => wrap.append(friendRow(
             r.user, '@' + r.user.username,
             h('span', { class: 'flex gap-2 shrink-0' },
-                smallBtn('Accept', 'bg-accent-green text-app-bg', () => friendAction('POST', `/api/friends/requests/${r.requestId}/accept`)),
+                smallBtn('Accept', 'bg-accent text-app-bg', () => friendAction('POST', `/api/friends/requests/${r.requestId}/accept`)),
                 smallBtn('Decline', 'bg-pill-bg border border-border-color text-text-secondary', () => friendAction('DELETE', `/api/friends/requests/${r.requestId}`))),
             () => go('u/' + r.user._id))));
         box.append(wrap);
@@ -564,7 +564,7 @@ function renderFriends() {
         const wrap = h('div', { class: 'flex flex-col gap-2' });
         friends.forEach((f) => wrap.append(friendRow(f, presenceText(f),
             h('button', {
-                class: 'btn-press shrink-0 w-9 h-9 rounded-lg bg-pill-bg border border-border-color text-text-secondary hover:text-accent-green hover:border-accent-green/50 flex items-center justify-center transition-colors duration-150',
+                class: 'btn-press shrink-0 w-9 h-9 rounded-lg bg-pill-bg border border-border-color text-text-secondary hover:text-accent hover:border-accent/50 flex items-center justify-center transition-colors duration-150',
                 'aria-label': 'Message ' + (f.displayName || f.username),
                 onclick: (e) => { e.stopPropagation(); go('messages/' + f._id); },
             }, h('i', { 'data-lucide': 'message-circle', class: 'w-4 h-4' })),
@@ -598,7 +598,7 @@ let frMsgTimer = null;
 function flashFriendMsg(text, ok) {
     const el = $('fr-msg');
     el.textContent = text;
-    el.className = 'text-xs mt-2 ' + (ok ? 'text-accent-green' : 'text-red-400');
+    el.className = 'text-xs mt-2 ' + (ok ? 'text-accent' : 'text-red-400');
     clearTimeout(frMsgTimer);
     frMsgTimer = setTimeout(() => el.classList.add('hidden'), 5000);
 }
@@ -634,7 +634,7 @@ const SOCIALS = {
 function socialChip(key, value) {
     const meta = SOCIALS[key];
     const shown = key === 'website' ? value.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '') : '@' + value;
-    const cls = 'btn-press inline-flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-pill-bg border border-border-color text-xs hover:border-accent-green/50 transition-colors duration-150';
+    const cls = 'btn-press inline-flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-pill-bg border border-border-color text-xs hover:border-accent/50 transition-colors duration-150';
     const inner = [h('span', { class: 'font-semibold text-text-secondary' }, meta.label), h('span', { class: 'truncate text-text-primary' }, shown)];
     const href = meta.url ? meta.url(value) : null;
     if (href) return h('a', { class: cls, href, target: '_blank', rel: 'noopener noreferrer nofollow' }, inner);
@@ -697,7 +697,7 @@ function renderInbox() {
             const u = c.user;
             const preview = (c.last.mine ? 'You: ' : '') + c.last.text.replace(/\s+/g, ' ');
             wrap.append(h('button', {
-                class: 'btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3 text-left hover:border-accent-green/50 transition-colors duration-150',
+                class: 'btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3 text-left hover:border-accent/50 transition-colors duration-150',
                 onclick: () => go('messages/' + u._id),
             },
                 avatarEl(u, 'w-11 h-11', 'text-sm', c.isFriend ? u.online : undefined),
@@ -705,10 +705,10 @@ function renderInbox() {
                     h('span', { class: 'flex items-center justify-between gap-2' },
                         h('span', { class: 'flex items-center gap-1.5 min-w-0' },
                             h('span', { class: 'text-sm truncate ' + (c.unread ? 'font-bold' : 'font-semibold') }, u.displayName || u.username), badgeEl(u.badge)),
-                        h('span', { class: 'text-[11px] shrink-0 ' + (c.unread ? 'text-accent-green' : 'text-text-muted') }, ago(c.last.at))),
+                        h('span', { class: 'text-[11px] shrink-0 ' + (c.unread ? 'text-accent' : 'text-text-muted') }, ago(c.last.at))),
                     h('span', { class: 'flex items-center justify-between gap-2 mt-0.5' },
                         h('span', { class: 'text-xs truncate ' + (c.unread ? 'text-text-primary' : 'text-text-secondary') }, preview),
-                        c.unread ? h('span', { class: 'shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-accent-green text-app-bg text-[11px] font-bold leading-5 text-center' }, c.unread > 99 ? '99+' : String(c.unread)) : null))));
+                        c.unread ? h('span', { class: 'shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-accent text-app-bg text-[11px] font-bold leading-5 text-center' }, c.unread > 99 ? '99+' : String(c.unread)) : null))));
         });
         box.append(wrap);
     }
@@ -724,8 +724,16 @@ function renderInbox() {
     if (!convs.length && !fresh.length) {
         box.append(h('div', { class: 'bg-card-bg border border-border-color rounded-2xl p-6 text-center' },
             h('p', { class: 'text-sm text-text-secondary mb-4' }, 'You can message your friends here. Add some friends to get started.'),
-            h('button', { class: 'btn-press bg-accent-green text-app-bg font-bold text-sm px-5 py-2.5 rounded-xl', onclick: () => go('friends') }, 'Find friends')));
+            h('button', { class: 'btn-press bg-accent text-app-bg font-bold text-sm px-5 py-2.5 rounded-xl', onclick: () => go('friends') }, 'Find friends')));
     }
+    icons();
+}
+
+// First time on this device: explain the 30-day message retention.
+function maybeShowDmNotice() {
+    const key = 'aptiks_dm_notice_' + currentUser._id;
+    if (localStorage.getItem(key)) return;
+    openOverlay($('dm-notice'), () => localStorage.setItem(key, '1'));
     icons();
 }
 
@@ -797,7 +805,7 @@ function renderChatHead() {
         avatarEl(u, 'w-9 h-9', 'text-sm', chat.canSend ? u.online : undefined),
         h('span', { class: 'min-w-0' },
             h('span', { class: 'flex items-center gap-1.5 min-w-0' }, h('span', { class: 'text-sm font-bold truncate' }, u.displayName || u.username), badgeEl(u.badge)),
-            h('span', { class: 'block text-[11px] truncate ' + (chat.canSend && u.online ? 'text-accent-green' : 'text-text-muted') },
+            h('span', { class: 'block text-[11px] truncate ' + (chat.canSend && u.online ? 'text-online' : 'text-text-muted') },
                 chat.canSend ? presenceText(u) : 'Not friends')));
     head.onclick = () => go('u/' + u._id);
 }
@@ -806,7 +814,7 @@ function bubble(text, mine, time, extra) {
     return h('div', { class: 'flex ' + (mine ? 'justify-end' : 'justify-start') },
         h('div', {
             class: 'max-w-[80%] px-3.5 py-2 text-sm leading-snug ' +
-                (mine ? 'bg-accent-green text-app-bg rounded-2xl rounded-br-md' : 'bg-card-bg border border-border-color rounded-2xl rounded-bl-md') +
+                (mine ? 'bg-accent text-app-bg rounded-2xl rounded-br-md' : 'bg-card-bg border border-border-color rounded-2xl rounded-bl-md') +
                 (extra && extra.failed ? ' opacity-70 ring-1 ring-red-400' : ''),
             onclick: extra && extra.onclick,
         },
@@ -928,7 +936,7 @@ async function loadPlayer(id) {
 function statTile(label, value, accent) {
     return h('div', { class: 'bg-card-bg border border-border-color rounded-xl px-3 py-3' },
         h('div', { class: 'text-[10px] text-text-muted uppercase tracking-wide' }, label),
-        h('div', { class: 'text-lg font-bold truncate ' + (accent ? 'text-accent-green' : '') }, String(value)));
+        h('div', { class: 'text-lg font-bold truncate ' + (accent ? 'text-accent' : '') }, String(value)));
 }
 function renderPlayer(u) {
     const body = $('player-body');
@@ -941,7 +949,7 @@ function renderPlayer(u) {
         h('div', { class: 'flex items-center justify-center gap-2 mt-4 min-w-0 max-w-full' },
             h('div', { class: 'text-xl font-bold truncate' }, name), badgeEl(u.badge)),
         h('div', { class: 'text-sm text-text-secondary' }, '@' + u.username),
-        shows && u.relation !== 'self' ? h('div', { class: 'text-xs mt-2 font-semibold ' + (u.online ? 'text-accent-green' : 'text-text-muted') }, presenceText(u)) : null));
+        shows && u.relation !== 'self' ? h('div', { class: 'text-xs mt-2 font-semibold ' + (u.online ? 'text-online' : 'text-text-muted') }, presenceText(u)) : null));
     const about = aboutEl(u, true);
     if (about) body.append(h('div', { class: 'mb-6' }, about));
 
@@ -978,7 +986,7 @@ function renderPlayer(u) {
     };
     const big = 'btn-press w-full font-bold text-sm py-3 rounded-xl ';
     if (u.relation === 'none') {
-        const b = h('button', { class: big + 'bg-accent-green text-app-bg shadow-[0_0_15px_rgba(163,230,53,0.25)]' }, 'Add friend');
+        const b = h('button', { class: big + 'bg-accent text-app-bg shadow-[0_0_15px_rgba(226,183,20,0.25)]' }, 'Add friend');
         b.addEventListener('click', () => run(b, 'POST', '/api/friends/request', { userId: u._id }));
         body.append(b);
     } else if (u.relation === 'outgoing') {
@@ -986,13 +994,13 @@ function renderPlayer(u) {
         b.addEventListener('click', () => run(b, 'DELETE', `/api/friends/requests/${u.requestId}`));
         body.append(b);
     } else if (u.relation === 'incoming') {
-        const acc = h('button', { class: big + 'bg-accent-green text-app-bg mb-2' }, 'Accept request');
+        const acc = h('button', { class: big + 'bg-accent text-app-bg mb-2' }, 'Accept request');
         acc.addEventListener('click', () => run(acc, 'POST', `/api/friends/requests/${u.requestId}/accept`));
         const dec = h('button', { class: big + 'bg-pill-bg border border-border-color text-text-secondary' }, 'Decline');
         dec.addEventListener('click', () => run(dec, 'DELETE', `/api/friends/requests/${u.requestId}`));
         body.append(acc, dec);
     } else if (u.relation === 'friend') {
-        const dm = h('button', { class: big + 'bg-accent-green text-app-bg mb-2 shadow-[0_0_15px_rgba(163,230,53,0.25)]' }, 'Message');
+        const dm = h('button', { class: big + 'bg-accent text-app-bg mb-2 shadow-[0_0_15px_rgba(226,183,20,0.25)]' }, 'Message');
         dm.addEventListener('click', () => go('messages/' + u._id));
         body.append(dm);
         const b = h('button', { class: big + 'bg-pill-bg border border-border-color text-red-400' }, 'Remove friend');
@@ -1027,7 +1035,7 @@ async function copyUsername() {
     }
     const fb = $('copy-feedback');
     fb.textContent = copied ? 'Copied!' : 'Copy failed';
-    fb.className = 'text-xs font-semibold ' + (copied ? 'text-accent-green' : 'text-red-400');
+    fb.className = 'text-xs font-semibold ' + (copied ? 'text-accent' : 'text-red-400');
     clearTimeout(copyTimer);
     copyTimer = setTimeout(() => fb.classList.add('hidden'), 1500);
 }
@@ -1039,12 +1047,12 @@ const CATEGORIES = [
 
 function renderProfileMenu() {
     $('profile-menu').innerHTML = `
-        <button onclick="go('u/' + currentUser._id)" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left hover:border-accent-green/50 transition-colors duration-150">
+        <button onclick="go('u/' + currentUser._id)" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left hover:border-accent/50 transition-colors duration-150">
             <span class="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0"><i data-lucide="id-card" class="w-4 h-4 text-text-secondary"></i></span>
             <span class="flex-1 min-w-0"><span class="block text-sm font-semibold">My profile</span><span class="block text-xs text-text-secondary truncate">See how others see you</span></span>
             <i data-lucide="chevron-right" class="w-4 h-4 text-text-secondary flex-shrink-0"></i>
         </button>` + CATEGORIES.map(c => `
-        <button onclick="go('account/${c.id}')" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left hover:border-accent-green/50 transition-colors duration-150">
+        <button onclick="go('account/${c.id}')" class="btn-press w-full flex items-center gap-3 bg-card-bg border border-border-color rounded-2xl px-4 py-3.5 text-left hover:border-accent/50 transition-colors duration-150">
             <span class="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
                 <i data-lucide="${c.icon}" class="w-4 h-4 text-text-secondary"></i>
             </span>
@@ -1094,7 +1102,7 @@ function buildPersonalizeHTML() {
             <div id="pz-avatar-preview" class="avatar w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-2xl font-bold flex-shrink-0"></div>
             <div class="flex flex-col gap-2 min-w-0">
                 <button type="button" onclick="document.getElementById('pz-file').click()" id="pz-upload-btn"
-                    class="btn-press text-sm font-semibold bg-pill-bg border border-border-color hover:border-accent-green/50 rounded-lg px-4 py-2 transition-colors duration-150">
+                    class="btn-press text-sm font-semibold bg-pill-bg border border-border-color hover:border-accent/50 rounded-lg px-4 py-2 transition-colors duration-150">
                     Choose photo
                 </button>
                 <button type="button" onclick="removePhoto()" id="pz-remove-btn"
@@ -1114,7 +1122,7 @@ function buildPersonalizeHTML() {
         <p class="text-[11px] text-text-muted mt-2 mb-3">Shown to opponents. Your @username is changed separately below.</p>
         <div id="pz-error" class="hidden text-xs mb-3"></div>
         <button onclick="savePersonalize()" id="pz-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+            class="btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(226,183,20,0.25)]">
             Save name
         </button>
     </div>
@@ -1136,7 +1144,7 @@ function setPhotoStatus(msg, kind) {
     if (!el) return;
     el.textContent = msg;
     el.className = 'text-xs min-h-[16px] mt-2 ' +
-        (kind === 'error' ? 'text-red-400' : kind === 'ok' ? 'text-accent-green' : 'text-text-secondary');
+        (kind === 'error' ? 'text-red-400' : kind === 'ok' ? 'text-online' : 'text-text-secondary');
 }
 
 // ---- Crop tool: the user chooses which part of the photo becomes the avatar ----
@@ -1398,7 +1406,7 @@ function buildAboutHTML() {
         </div>
         <div id="ab-error" class="hidden text-xs mb-3"></div>
         <button onclick="saveAbout()" id="ab-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+            class="btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(226,183,20,0.25)]">
             Save
         </button>
     </div>`;
@@ -1453,7 +1461,7 @@ function buildUsernameHTML() {
 
         <div id="un-error" class="hidden text-xs mb-3"></div>
         <button onclick="saveUsername()" id="un-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+            class="btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(226,183,20,0.25)]">
             Update username
         </button>
     </div>`;
@@ -1463,7 +1471,7 @@ function setUnStatus(kind, msg) {
     const el = $('un-status');
     const input = $('un-new');
     if (!el || !input) return;
-    const colors = { idle: 'text-text-muted', checking: 'text-text-secondary', ok: 'text-accent-green', bad: 'text-red-400' };
+    const colors = { idle: 'text-text-muted', checking: 'text-text-secondary', ok: 'text-online', bad: 'text-red-400' };
     el.className = 'text-[11px] mt-1.5 mb-3 min-h-[16px] ' + colors[kind];
     el.textContent = msg;
     input.classList.toggle('bad', kind === 'bad');
@@ -1545,7 +1553,7 @@ function buildAccountHTML() {
 
         <div id="em-error" class="hidden text-xs mb-3"></div>
         <button onclick="saveEmail()" id="em-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+            class="btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(226,183,20,0.25)]">
             Update email
         </button>
     </div>
@@ -1558,7 +1566,7 @@ function buildAccountHTML() {
         <input id="pw-confirm" type="password" autocomplete="new-password" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-3">
         <div id="pw-error" class="hidden text-xs mb-3"></div>
         <button onclick="savePassword()" id="pw-save-btn"
-            class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
+            class="btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(226,183,20,0.25)]">
             Update password
         </button>
     </div>`;
@@ -1573,7 +1581,7 @@ function setEmStatus(kind, msg) {
     const el = $('em-status');
     const input = $('em-new');
     if (!el || !input) return;
-    const colors = { idle: 'text-text-muted', checking: 'text-text-secondary', ok: 'text-accent-green', bad: 'text-red-400' };
+    const colors = { idle: 'text-text-muted', checking: 'text-text-secondary', ok: 'text-online', bad: 'text-red-400' };
     el.className = 'text-[11px] mt-1.5 mb-3 min-h-[16px] ' + colors[kind];
     el.textContent = msg;
     input.classList.toggle('bad', kind === 'bad');
@@ -1680,6 +1688,6 @@ async function savePassword() {
         $('splash').textContent = '';
         $('splash').append(h('div', { class: 'text-center px-8' },
             h('p', { class: 'text-sm text-text-secondary mb-4' }, err.message || 'Something went wrong.'),
-            h('button', { class: 'btn-press bg-accent-green text-app-bg font-bold text-sm px-6 py-3 rounded-xl', onclick: () => location.reload() }, 'Try again')));
+            h('button', { class: 'btn-press bg-accent text-app-bg font-bold text-sm px-6 py-3 rounded-xl', onclick: () => location.reload() }, 'Try again')));
     }
 })();
