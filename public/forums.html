@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#171717">
+<title>Community · Aptiks</title>
+<script>
+    // Not signed in? Go to login before anything paints (replace: no history entry).
+    if (!localStorage.getItem('minduel_token')) {
+        document.documentElement.style.display = 'none';
+        window.location.replace('/index.html');
+    }
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontFamily: { sans: ['Space Grotesk', 'sans-serif'] },
+                colors: {
+                    'app-bg': '#171717',
+                    'card-bg': '#252525',
+                    'pill-bg': '#292929',
+                    'input-bg': '#1E1E1E',
+                    'accent': '#E2B714',
+                    'online': '#4ADE80',
+                    'text-primary': '#FFFFFF',
+                    'text-secondary': '#A2A2A2',
+                    'text-muted': '#747474',
+                    'border-color': '#3A3A3A'
+                }
+            }
+        }
+    }
+</script>
+<style>
+    html { height: 100%; overscroll-behavior: none; }
+    body { background-color: #171717; color: #FFFFFF; font-family: 'Space Grotesk', sans-serif; margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #171717; }
+    ::-webkit-scrollbar-thumb { background: #3A3A3A; border-radius: 4px; }
+    .btn-press:active { transform: scale(.97); }
+    .avatar { background-color: #E2B714; color: #171717; }
+    .avatar.has-photo { background-color: #252525; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .field { background: #1E1E1E; border: 1px solid #3A3A3A; }
+    .field:focus { outline: none; border-color: #E2B714; box-shadow: 0 0 0 1px #E2B714; }
+    select.field { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A2A2A2' stroke-width='3'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+    /* Bottom nav: sits above the phone's gesture bar */
+    #bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
+    .nav-item { color: #747474; transition: color .15s; }
+    .nav-item.active { color: #E2B714; }
+    .nav-item.active svg { stroke-width: 2.4; }
+
+    /* Tag chips */
+    .tag-chip { border: 1px solid #3A3A3A; color: #A2A2A2; white-space: nowrap; transition: all .15s; }
+    .tag-chip.active { border-color: transparent; color: #171717; }
+    .tag-dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+
+    /* Sort segmented control */
+    .seg-btn { color: #747474; transition: all .15s; }
+    .seg-btn.active { color: #FFFFFF; background: #292929; }
+
+    /* Post card */
+    .post-card { background: #1E1E1E; border: 1px solid #3A3A3A; transition: border-color .15s, transform .1s; }
+    .post-card:active { transform: scale(.99); }
+    .post-card:hover { border-color: #4A4A4A; }
+
+    /* Reaction pill */
+    .reax { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; }
+    .reax.mine { border-color: #E2B714; color: #E2B714; background: rgba(226,183,20,.1); }
+
+    /* Reply bubble */
+    .reply-bubble { background: #1E1E1E; border: 1px solid #3A3A3A; }
+
+    textarea { font-family: inherit; }
+    textarea::-webkit-scrollbar { width: 0; }
+
+    .fade-in { animation: fadeIn .18s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    .empty-illustration { border: 1px dashed #3A3A3A; }
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash" class="fixed inset-0 z-[200] bg-app-bg flex items-center justify-center">
+    <div class="w-12 h-12 rounded-xl bg-card-bg flex items-center justify-center border border-border-color animate-pulse">
+        <div class="w-6 h-6 bg-accent rounded-md transform rotate-45"></div>
+    </div>
+</div>
+
+<div class="h-full flex flex-col overflow-hidden">
+
+    <!-- TOP BAR -->
+    <header class="z-40 flex-shrink-0 flex items-center justify-between px-5 h-[54px] bg-app-bg border-b border-border-color">
+        <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded bg-card-bg flex items-center justify-center border border-border-color">
+                <i data-lucide="hash" class="w-3.5 h-3.5 text-accent"></i>
+            </div>
+            <span class="text-base font-semibold tracking-tight">Community</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="toggleSearch()" aria-label="Search" title="Search"
+                class="btn-press relative w-9 h-9 rounded-full border border-border-color bg-pill-bg flex items-center justify-center text-text-primary hover:border-accent/50 transition-colors duration-150">
+                <i data-lucide="search" class="w-4 h-4"></i>
+            </button>
+            <button onclick="openComposer()" aria-label="New post" title="New post"
+                class="btn-press w-9 h-9 rounded-full bg-accent text-app-bg flex items-center justify-center shadow-[0_0_15px_rgba(226,183,20,0.25)]">
+                <i data-lucide="plus" class="w-4.5 h-4.5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- LIST VIEW -->
+    <div id="view-list" class="flex-1 flex flex-col min-h-0">
+        <div id="search-row" class="hidden flex-shrink-0 px-5 pt-3">
+            <div class="relative">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input id="search-input" placeholder="Search posts" autocomplete="off"
+                    class="field w-full rounded-lg pl-9 pr-3 py-2 text-sm" oninput="renderList()">
+            </div>
+        </div>
+
+        <!-- Tag filter chips -->
+        <div class="flex-shrink-0 px-5 pt-3 pb-1">
+            <div id="tag-row" class="flex items-center gap-2 overflow-x-auto pb-1" style="scrollbar-width:none"></div>
+        </div>
+
+        <!-- Sort segmented control -->
+        <div class="flex-shrink-0 px-5 pb-3 pt-1">
+            <div class="inline-flex items-center gap-1 bg-input-bg border border-border-color rounded-lg p-1">
+                <button data-sort="active" onclick="setSort('active')" class="seg-btn text-xs font-semibold px-3 py-1.5 rounded-md">Recent activity</button>
+                <button data-sort="new" onclick="setSort('new')" class="seg-btn text-xs font-semibold px-3 py-1.5 rounded-md">New</button>
+                <button data-sort="top" onclick="setSort('top')" class="seg-btn text-xs font-semibold px-3 py-1.5 rounded-md">Top</button>
+            </div>
+        </div>
+
+        <main class="flex-1 overflow-y-auto" style="overscroll-behavior: contain">
+            <div class="max-w-[520px] w-full mx-auto px-5 pb-6">
+                <div id="post-list" class="flex flex-col gap-2.5"></div>
+                <div id="list-empty" class="hidden empty-illustration rounded-2xl py-12 text-center">
+                    <i data-lucide="message-square-dashed" class="w-6 h-6 text-text-muted mx-auto mb-3"></i>
+                    <p class="text-sm text-text-secondary mb-1">No posts here yet</p>
+                    <p class="text-xs text-text-muted">Be the first to start a thread</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- THREAD VIEW (full screen: replaces list + bottom nav while open) -->
+    <div id="view-thread" class="hidden flex-1 min-h-0 flex flex-col bg-app-bg">
+        <div class="flex-shrink-0 flex items-center gap-1 px-2 h-[54px] border-b border-border-color">
+            <button onclick="closeThread()" aria-label="Back" class="btn-press w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5">
+                <i data-lucide="chevron-left" class="w-5 h-5"></i>
+            </button>
+            <div id="thread-head-title" class="text-sm font-semibold truncate flex-1 min-w-0"></div>
+            <button id="thread-pin-btn" onclick="togglePin()" class="btn-press hidden w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5" title="Pin post">
+                <i data-lucide="pin" class="w-4 h-4"></i>
+            </button>
+            <button id="thread-lock-btn" onclick="toggleLock()" class="btn-press hidden w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5" title="Lock post">
+                <i data-lucide="lock" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <div id="thread-scroller" class="flex-1 overflow-y-auto px-5 py-5" style="overscroll-behavior: contain">
+            <div class="max-w-[520px] w-full mx-auto">
+                <div id="thread-op"></div>
+                <div class="flex items-center gap-2 my-5">
+                    <div class="h-px bg-border-color flex-1"></div>
+                    <span id="thread-reply-count" class="text-[11px] font-semibold text-text-muted"></span>
+                    <div class="h-px bg-border-color flex-1"></div>
+                </div>
+                <div id="thread-replies" class="flex flex-col gap-3"></div>
+            </div>
+        </div>
+
+        <div class="flex-shrink-0 border-t border-border-color px-4 pt-2.5" style="padding-bottom: calc(0.625rem + env(safe-area-inset-bottom))">
+            <div id="thread-reply-form" class="max-w-[520px] w-full mx-auto flex items-end gap-2">
+                <textarea id="reply-input" rows="1" maxlength="1000" placeholder="Reply to this thread" class="field flex-1 min-w-0 rounded-2xl px-4 py-2.5 text-sm resize-none" style="max-height:128px"></textarea>
+                <button id="reply-send" onclick="submitReply()" aria-label="Send" class="btn-press shrink-0 w-10 h-10 rounded-full bg-accent text-app-bg flex items-center justify-center">
+                    <i data-lucide="send" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div id="thread-locked-msg" class="hidden max-w-[520px] w-full mx-auto text-xs text-text-muted text-center py-2 flex items-center justify-center gap-1.5">
+                <i data-lucide="lock" class="w-3 h-3"></i><span>This post is locked. No new replies.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM NAV (mirrors the app shell; other tabs jump back into home.html) -->
+    <nav id="bottom-nav" class="z-40 flex-shrink-0 bg-app-bg border-t border-border-color">
+        <div class="max-w-[520px] mx-auto flex items-stretch h-[62px]">
+            <button onclick="window.location.href='home.html#/home'" class="nav-item flex-1 flex flex-col items-center justify-center gap-1">
+                <i data-lucide="home" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Home</span>
+            </button>
+            <button onclick="window.location.href='home.html#/leaderboard'" class="nav-item flex-1 flex flex-col items-center justify-center gap-1">
+                <i data-lucide="trophy" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Ranks</span>
+            </button>
+            <button class="nav-item active flex-1 flex flex-col items-center justify-center gap-1">
+                <i data-lucide="hash" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Community</span>
+            </button>
+            <button onclick="window.location.href='home.html#/friends'" class="nav-item flex-1 flex flex-col items-center justify-center gap-1">
+                <i data-lucide="users" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Friends</span>
+            </button>
+            <button onclick="window.location.href='home.html#/account'" class="nav-item flex-1 flex flex-col items-center justify-center gap-1">
+                <i data-lucide="user" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Account</span>
+            </button>
+        </div>
+    </nav>
+</div>
+
+<!-- NEW POST SHEET -->
+<div id="composer-sheet" class="hidden fixed inset-0 z-[100] bg-black/75 flex items-end sm:items-center justify-center" onclick="if (event.target === this) closeComposer()">
+    <div class="w-full max-w-[560px] max-h-[90vh] overflow-y-auto bg-card-bg border border-border-color rounded-t-2xl sm:rounded-2xl p-5" style="overscroll-behavior: contain">
+        <div class="flex items-center justify-between mb-4">
+            <div class="text-base font-bold">New post</div>
+            <button onclick="closeComposer()" aria-label="Close" class="btn-press w-8 h-8 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <label class="text-xs text-text-secondary block mb-2">Tag</label>
+        <div id="composer-tags" class="flex items-center gap-2 overflow-x-auto pb-1 mb-4" style="scrollbar-width:none"></div>
+
+        <label class="text-xs text-text-secondary block mb-2">Title</label>
+        <input id="composer-title" maxlength="100" autocomplete="off" placeholder="What's this about?"
+            class="field w-full rounded-lg px-3 py-2.5 text-sm mb-4">
+
+        <label class="text-xs text-text-secondary block mb-2">Message</label>
+        <textarea id="composer-body" rows="5" maxlength="2000" placeholder="Write your post..."
+            class="field w-full rounded-lg px-3 py-2.5 text-sm resize-none mb-1"></textarea>
+        <div class="text-[11px] text-text-muted text-right mb-4"><span id="composer-count">0</span>/2000</div>
+
+        <div id="composer-err" class="hidden text-xs text-red-400 mb-3"></div>
+
+        <button id="composer-submit" onclick="submitPost()" class="btn-press w-full py-3 rounded-xl text-sm font-bold bg-accent text-app-bg shadow-[0_0_15px_rgba(226,183,20,0.25)]">Post</button>
+    </div>
+</div>
+
+<script>
+// ───────────────────────────────────────────────────────────────────────
+// Community — a Discord-forum-style tab for Aptiks.
+// Standalone prototype: reads the same auth/user data as the rest of the
+// app (minduel_token / minduel_user from localStorage) but keeps its own
+// posts in localStorage for now. When this gets folded into the main
+// codebase, swap loadPosts/savePosts/submitPost/submitReply for real
+// API calls and keep the rendering functions as-is.
+// ───────────────────────────────────────────────────────────────────────
+
+const STORAGE_KEY = 'aptiks_community_posts_v1';
+const VIEWED_KEY = 'aptiks_community_viewed_v1';
+
+const TAGS = [
+    { id: 'general',  name: 'General',      color: '#60A5FA' },
+    { id: 'strategy', name: 'Strategy',      color: '#E2B714' },
+    { id: 'bugs',     name: 'Bug Reports',   color: '#F87171' },
+    { id: 'feedback', name: 'Feedback',      color: '#4ADE80' },
+    { id: 'offtopic', name: 'Off Topic',     color: '#C084FC' },
+];
+const REACTIONS = ['👍', '🔥', '❤️', '😂'];
+
+const $ = (id) => document.getElementById(id);
+
+function currentUser() {
+    try { return JSON.parse(localStorage.getItem('minduel_user') || 'null'); }
+    catch { return null; }
+}
+function isStaff() {
+    const u = currentUser();
+    return !!u && (u.role === 'admin' || u.role === 'moderator');
+}
+function myKey() {
+    const u = currentUser();
+    return (u && (u.username || u.displayName)) || 'guest';
+}
+
+// ── state ────────────────────────────────────────────────────────────
+const state = {
+    filterTag: 'all',
+    sort: 'active',
+    search: '',
+    currentPostId: null,
+    composerTag: TAGS[0].id,
+};
+
+// ── persistence ──────────────────────────────────────────────────────
+function loadPosts() {
+    let posts;
+    try { posts = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }
+    catch { posts = null; }
+    if (!posts) { posts = seedPosts(); savePosts(posts); }
+    return posts;
+}
+function savePosts(posts) { localStorage.setItem(STORAGE_KEY, JSON.stringify(posts)); }
+function getViewed() {
+    try { return JSON.parse(localStorage.getItem(VIEWED_KEY) || '[]'); }
+    catch { return []; }
+}
+function markViewed(id) {
+    const v = getViewed();
+    if (!v.includes(id)) { v.push(id); localStorage.setItem(VIEWED_KEY, JSON.stringify(v)); return true; }
+    return false;
+}
+
+function seedPosts() {
+    const now = Date.now();
+    const hr = 3600000, day = 86400000;
+    return [
+        {
+            id: 'p1', tag: 'strategy', title: 'Best openings against faster solvers?',
+            body: "I keep losing the first few seconds of duels to people who clearly have their patterns memorized. What's everyone's approach to the opening few moves — do you have a fixed routine or do you read the board fresh every time?",
+            authorId: 'u_mira', authorName: 'mira', authorAvatar: null,
+            createdAt: now - 6 * hr, pinned: true, locked: false, views: 214,
+            reactions: { '👍': ['sam', 'kai'], '🔥': ['jo'] },
+            replies: [
+                { id: 'r1', body: "I drill the same 10 opening patterns every morning. After a week it stops being 'reading' and starts being recognition.", authorId: 'u_sam', authorName: 'sam', authorAvatar: null, createdAt: now - 5 * hr, reactions: { '👍': ['mira'] } },
+                { id: 'r2', body: 'Honestly just play more. Pattern memorization only gets you so far before opponents adapt.', authorId: 'u_kai', authorName: 'kai', authorAvatar: null, createdAt: now - 4 * hr, reactions: {} },
+            ],
+        },
+        {
+            id: 'p2', tag: 'bugs', title: 'Rating not updating after last match',
+            body: 'Won a duel about 20 minutes ago and my rating on the leaderboard still shows the old number. Refreshed a few times, still stuck. Anyone else seeing this?',
+            authorId: 'u_devon', authorName: 'devon', authorAvatar: null,
+            createdAt: now - 20 * 60000, pinned: false, locked: false, views: 58,
+            reactions: { '👍': ['ash'] },
+            replies: [
+                { id: 'r3', body: 'Same here, started a couple hours ago for me.', authorId: 'u_ash', authorName: 'ash', authorAvatar: null, createdAt: now - 15 * 60000, reactions: {} },
+            ],
+        },
+        {
+            id: 'p3', tag: 'feedback', title: 'Would love a rematch button',
+            body: "Small thing, but after a duel ends it'd be great to send a rematch request to the same opponent instead of going back through matchmaking.",
+            authorId: 'u_jo', authorName: 'jo', authorAvatar: null,
+            createdAt: now - 2 * day, pinned: false, locked: false, views: 132,
+            reactions: { '🔥': ['mira', 'sam', 'kai'], '👍': ['devon'] },
+            replies: [],
+        },
+        {
+            id: 'p4', tag: 'offtopic', title: 'What music do you duel to?',
+            body: "Lo-fi puts me to sleep mid-match apparently. Currently running on instrumental drum and bass. What's everyone else's ranked-match soundtrack?",
+            authorId: 'u_ash', authorName: 'ash', authorAvatar: null,
+            createdAt: now - 5 * day, pinned: false, locked: true, views: 301,
+            reactions: { '😂': ['jo', 'devon'] },
+            replies: [
+                { id: 'r4', body: 'Dead silence. Any music and I start tapping along instead of thinking.', authorId: 'u_kai', authorName: 'kai', authorAvatar: null, createdAt: now - 4 * day, reactions: {} },
+            ],
+        },
+    ];
+}
+
+let POSTS = [];
+
+// ── init ─────────────────────────────────────────────────────────────
+function init() {
+    POSTS = loadPosts();
+    renderTagRow();
+    renderComposerTags();
+    setSort('active');
+    lucide.createIcons();
+    $('splash').style.display = 'none';
+    $('reply-input').addEventListener('input', autoGrow);
+    $('composer-body').addEventListener('input', () => {
+        $('composer-count').textContent = $('composer-body').value.length;
+    });
+    $('reply-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); }
+    });
+}
+function autoGrow(e) { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px'; }
+
+// ── tag chips (filter row) ──────────────────────────────────────────
+function renderTagRow() {
+    const row = $('tag-row');
+    row.innerHTML = '';
+    row.appendChild(tagChip('all', 'All posts', '#747474', state.filterTag === 'all', () => { state.filterTag = 'all'; renderTagRow(); renderList(); }));
+    TAGS.forEach((t) => {
+        row.appendChild(tagChip(t.id, t.name, t.color, state.filterTag === t.id, () => { state.filterTag = t.id; renderTagRow(); renderList(); }));
+    });
+}
+function tagChip(id, label, color, active, onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'tag-chip btn-press shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold' + (active ? ' active' : '');
+    if (active) btn.style.background = color;
+    if (id !== 'all') {
+        const dot = document.createElement('span');
+        dot.className = 'tag-dot';
+        dot.style.background = active ? '#171717' : color;
+        btn.appendChild(dot);
+    }
+    const span = document.createElement('span');
+    span.textContent = label;
+    btn.appendChild(span);
+    btn.onclick = onClick;
+    return btn;
+}
+function tagMeta(id) { return TAGS.find((t) => t.id === id) || { name: id, color: '#A2A2A2' }; }
+
+// ── sort control ─────────────────────────────────────────────────────
+function setSort(key) {
+    state.sort = key;
+    document.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.sort === key));
+    renderList();
+}
+
+function toggleSearch() {
+    const row = $('search-row');
+    row.classList.toggle('hidden');
+    if (!row.classList.contains('hidden')) $('search-input').focus();
+    else { $('search-input').value = ''; state.search = ''; renderList(); }
+}
+
+// ── list rendering ──────────────────────────────────────────────────
+function lastActivity(post) {
+    let t = post.createdAt;
+    post.replies.forEach((r) => { if (r.createdAt > t) t = r.createdAt; });
+    return t;
+}
+function reactionCount(item) {
+    return Object.values(item.reactions || {}).reduce((n, arr) => n + arr.length, 0);
+}
+function topScore(post) {
+    return reactionCount(post) + post.replies.length * 2;
+}
+
+function renderList() {
+    state.search = ($('search-input').value || '').trim().toLowerCase();
+    let list = POSTS.filter((p) => state.filterTag === 'all' || p.tag === state.filterTag);
+    if (state.search) {
+        list = list.filter((p) => p.title.toLowerCase().includes(state.search) || p.body.toLowerCase().includes(state.search));
+    }
+    list = list.slice().sort((a, b) => {
+        if (!!b.pinned - !!a.pinned !== 0) return !!b.pinned - !!a.pinned;
+        if (state.sort === 'new') return b.createdAt - a.createdAt;
+        if (state.sort === 'top') return topScore(b) - topScore(a);
+        return lastActivity(b) - lastActivity(a);
+    });
+
+    const container = $('post-list');
+    container.innerHTML = '';
+    $('list-empty').classList.toggle('hidden', list.length > 0);
+    list.forEach((post) => container.appendChild(postCard(post)));
+    lucide.createIcons();
+}
+
+function relTime(ts) {
+    const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+    if (s < 60) return 'just now';
+    const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+    const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+    const d = Math.floor(h / 24); if (d < 30) return d + 'd ago';
+    const mo = Math.floor(d / 30); if (mo < 12) return mo + 'mo ago';
+    return Math.floor(mo / 12) + 'y ago';
+}
+
+function avatarEl(name, size) {
+    const el = document.createElement('div');
+    el.className = `avatar rounded-full overflow-hidden flex items-center justify-center font-bold flex-shrink-0`;
+    el.style.width = size + 'px'; el.style.height = size + 'px';
+    el.style.fontSize = Math.max(10, size * 0.42) + 'px';
+    el.textContent = (name || '?').charAt(0).toUpperCase();
+    return el;
+}
+
+function postCard(post) {
+    const meta = tagMeta(post.tag);
+    const card = document.createElement('div');
+    card.className = 'post-card rounded-2xl p-4 fade-in cursor-pointer';
+    card.onclick = () => openThread(post.id);
+
+    const top = document.createElement('div');
+    top.className = 'flex items-center justify-between gap-2 mb-2';
+    const chipWrap = document.createElement('div');
+    chipWrap.className = 'flex items-center gap-1.5 min-w-0';
+    const dot = document.createElement('span');
+    dot.className = 'tag-dot'; dot.style.background = meta.color;
+    chipWrap.appendChild(dot);
+    const chipLabel = document.createElement('span');
+    chipLabel.className = 'text-[11px] font-semibold truncate';
+    chipLabel.style.color = meta.color;
+    chipLabel.textContent = meta.name;
+    chipWrap.appendChild(chipLabel);
+    if (post.pinned) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'pin'); i.className = 'w-3 h-3 text-accent shrink-0'; chipWrap.appendChild(i); }
+    if (post.locked) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'lock'); i.className = 'w-3 h-3 text-text-muted shrink-0'; chipWrap.appendChild(i); }
+    top.appendChild(chipWrap);
+    const time = document.createElement('span');
+    time.className = 'text-[11px] text-text-muted shrink-0';
+    time.textContent = relTime(lastActivity(post));
+    top.appendChild(time);
+    card.appendChild(top);
+
+    const title = document.createElement('div');
+    title.className = 'font-bold text-sm mb-1 truncate';
+    title.textContent = post.title;
+    card.appendChild(title);
+
+    const body = document.createElement('div');
+    body.className = 'text-xs text-text-secondary mb-3 overflow-hidden';
+    body.style.display = '-webkit-box'; body.style.webkitLineClamp = '2'; body.style.webkitBoxOrient = 'vertical';
+    body.textContent = post.body;
+    card.appendChild(body);
+
+    const bottom = document.createElement('div');
+    bottom.className = 'flex items-center justify-between gap-2';
+    const authorWrap = document.createElement('div');
+    authorWrap.className = 'flex items-center gap-2 min-w-0';
+    authorWrap.appendChild(avatarEl(post.authorName, 20));
+    const authorName = document.createElement('span');
+    authorName.className = 'text-[11px] text-text-secondary truncate';
+    authorName.textContent = post.authorName;
+    authorWrap.appendChild(authorName);
+    bottom.appendChild(authorWrap);
+
+    const stats = document.createElement('div');
+    stats.className = 'flex items-center gap-3 text-text-muted text-[11px] shrink-0';
+    stats.innerHTML = `
+        <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i>${post.replies.length}</span>
+        <span class="flex items-center gap-1"><i data-lucide="eye" class="w-3 h-3"></i>${post.views}</span>
+    `;
+    bottom.appendChild(stats);
+    card.appendChild(bottom);
+
+    return card;
+}
+
+// ── thread view ──────────────────────────────────────────────────────
+function openThread(id) {
+    state.currentPostId = id;
+    const post = POSTS.find((p) => p.id === id);
+    if (!post) return;
+    if (markViewed(id)) { post.views += 1; savePosts(POSTS); }
+
+    $('view-list').classList.add('hidden');
+    $('view-thread').classList.remove('hidden');
+    $('bottom-nav').classList.add('hidden');
+    renderThread();
+    $('thread-scroller').scrollTop = 0;
+}
+function closeThread() {
+    state.currentPostId = null;
+    $('view-thread').classList.add('hidden');
+    $('view-list').classList.remove('hidden');
+    $('bottom-nav').classList.remove('hidden');
+    renderList();
+}
+
+function renderThread() {
+    const post = POSTS.find((p) => p.id === state.currentPostId);
+    if (!post) return closeThread();
+    const meta = tagMeta(post.tag);
+
+    $('thread-head-title').textContent = post.title;
+
+    const staff = isStaff();
+    const pinBtn = $('thread-pin-btn'), lockBtn = $('thread-lock-btn');
+    pinBtn.classList.toggle('hidden', !staff);
+    lockBtn.classList.toggle('hidden', !staff);
+    pinBtn.classList.toggle('text-accent', !!post.pinned);
+    lockBtn.classList.toggle('text-accent', !!post.locked);
+
+    // Original post
+    const op = $('thread-op');
+    op.innerHTML = '';
+    const opCard = document.createElement('div');
+    opCard.className = 'post-card rounded-2xl p-4';
+
+    const chipRow = document.createElement('div');
+    chipRow.className = 'flex items-center gap-1.5 mb-3';
+    const dot = document.createElement('span'); dot.className = 'tag-dot'; dot.style.background = meta.color;
+    const chipLabel = document.createElement('span');
+    chipLabel.className = 'text-[11px] font-semibold'; chipLabel.style.color = meta.color; chipLabel.textContent = meta.name;
+    chipRow.append(dot, chipLabel);
+    if (post.pinned) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'pin'); i.className = 'w-3 h-3 text-accent'; chipRow.appendChild(i); }
+    if (post.locked) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'lock'); i.className = 'w-3 h-3 text-text-muted'; chipRow.appendChild(i); }
+    opCard.appendChild(chipRow);
+
+    const title = document.createElement('div');
+    title.className = 'text-xl font-bold tracking-tight mb-3'; title.textContent = post.title;
+    opCard.appendChild(title);
+
+    const body = document.createElement('p');
+    body.className = 'text-sm text-text-secondary whitespace-pre-wrap mb-4'; body.textContent = post.body;
+    opCard.appendChild(body);
+
+    const authorRow = document.createElement('div');
+    authorRow.className = 'flex items-center gap-2 mb-4';
+    authorRow.appendChild(avatarEl(post.authorName, 26));
+    const authorInfo = document.createElement('div');
+    authorInfo.innerHTML = `<div class="text-xs font-semibold">${escapeHtml(post.authorName)}</div><div class="text-[11px] text-text-muted">${relTime(post.createdAt)}</div>`;
+    authorRow.appendChild(authorInfo);
+    opCard.appendChild(authorRow);
+
+    opCard.appendChild(reactionRow(post, 'post', post.id));
+    op.appendChild(opCard);
+
+    $('thread-reply-count').textContent = post.replies.length + (post.replies.length === 1 ? ' reply' : ' replies');
+
+    // Replies
+    const repliesEl = $('thread-replies');
+    repliesEl.innerHTML = '';
+    post.replies.forEach((r) => repliesEl.appendChild(replyBubble(post, r)));
+
+    // Reply form vs locked
+    const locked = post.locked && !staff;
+    $('thread-reply-form').classList.toggle('hidden', locked);
+    $('thread-locked-msg').classList.toggle('hidden', !locked);
+
+    lucide.createIcons();
+}
+
+function replyBubble(post, reply) {
+    const wrap = document.createElement('div');
+    wrap.className = 'reply-bubble rounded-2xl p-3.5 fade-in';
+    const head = document.createElement('div');
+    head.className = 'flex items-center gap-2 mb-2';
+    head.appendChild(avatarEl(reply.authorName, 20));
+    const info = document.createElement('div');
+    info.innerHTML = `<span class="text-xs font-semibold">${escapeHtml(reply.authorName)}</span> <span class="text-[11px] text-text-muted">${relTime(reply.createdAt)}</span>`;
+    head.appendChild(info);
+    wrap.appendChild(head);
+    const body = document.createElement('p');
+    body.className = 'text-sm text-text-primary whitespace-pre-wrap mb-2'; body.textContent = reply.body;
+    wrap.appendChild(body);
+    wrap.appendChild(reactionRow(post, 'reply', reply.id));
+    return wrap;
+}
+
+function reactionRow(post, kind, itemId) {
+    const item = kind === 'post' ? post : post.replies.find((r) => r.id === itemId);
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-1.5 flex-wrap';
+    REACTIONS.forEach((emoji) => {
+        const users = (item.reactions && item.reactions[emoji]) || [];
+        const mine = users.includes(myKey());
+        const btn = document.createElement('button');
+        btn.className = 'reax btn-press flex items-center gap-1 rounded-full px-2.5 py-1 text-xs' + (mine ? ' mine' : '');
+        btn.innerHTML = `<span>${emoji}</span>${users.length ? `<span>${users.length}</span>` : ''}`;
+        btn.onclick = (e) => { e.stopPropagation(); toggleReaction(kind, itemId, emoji); };
+        row.appendChild(btn);
+    });
+    return row;
+}
+
+function toggleReaction(kind, itemId, emoji) {
+    const post = POSTS.find((p) => p.id === state.currentPostId);
+    if (!post) return;
+    const item = kind === 'post' ? post : post.replies.find((r) => r.id === itemId);
+    if (!item) return;
+    item.reactions = item.reactions || {};
+    const arr = item.reactions[emoji] = item.reactions[emoji] || [];
+    const me = myKey();
+    const idx = arr.indexOf(me);
+    if (idx >= 0) arr.splice(idx, 1); else arr.push(me);
+    savePosts(POSTS);
+    renderThread();
+}
+
+function togglePin() {
+    if (!isStaff()) return;
+    const post = POSTS.find((p) => p.id === state.currentPostId);
+    if (!post) return;
+    post.pinned = !post.pinned;
+    savePosts(POSTS);
+    renderThread();
+}
+function toggleLock() {
+    if (!isStaff()) return;
+    const post = POSTS.find((p) => p.id === state.currentPostId);
+    if (!post) return;
+    post.locked = !post.locked;
+    savePosts(POSTS);
+    renderThread();
+}
+
+function submitReply() {
+    const post = POSTS.find((p) => p.id === state.currentPostId);
+    if (!post) return;
+    if (post.locked && !isStaff()) return;
+    const input = $('reply-input');
+    const body = input.value.trim();
+    if (!body) return;
+    const u = currentUser();
+    post.replies.push({
+        id: 'r' + Date.now(),
+        body,
+        authorId: myKey(),
+        authorName: (u && (u.displayName || u.username)) || 'You',
+        authorAvatar: (u && u.avatarUrl) || null,
+        createdAt: Date.now(),
+        reactions: {},
+    });
+    savePosts(POSTS);
+    input.value = ''; input.style.height = 'auto';
+    renderThread();
+    $('thread-scroller').scrollTop = $('thread-scroller').scrollHeight;
+}
+
+// ── composer ─────────────────────────────────────────────────────────
+function renderComposerTags() {
+    const row = $('composer-tags');
+    row.innerHTML = '';
+    TAGS.forEach((t) => {
+        row.appendChild(tagChip(t.id, t.name, t.color, state.composerTag === t.id, () => { state.composerTag = t.id; renderComposerTags(); }));
+    });
+}
+function openComposer() {
+    $('composer-title').value = '';
+    $('composer-body').value = '';
+    $('composer-count').textContent = '0';
+    $('composer-err').classList.add('hidden');
+    state.composerTag = TAGS[0].id;
+    renderComposerTags();
+    $('composer-sheet').classList.remove('hidden');
+    lucide.createIcons();
+    setTimeout(() => $('composer-title').focus(), 50);
+}
+function closeComposer() { $('composer-sheet').classList.add('hidden'); }
+
+function submitPost() {
+    const title = $('composer-title').value.trim();
+    const body = $('composer-body').value.trim();
+    const err = $('composer-err');
+    if (!title || !body) {
+        err.textContent = 'Add a title and a message before posting.';
+        err.classList.remove('hidden');
+        return;
+    }
+    const u = currentUser();
+    const post = {
+        id: 'p' + Date.now(),
+        tag: state.composerTag,
+        title, body,
+        authorId: myKey(),
+        authorName: (u && (u.displayName || u.username)) || 'You',
+        authorAvatar: (u && u.avatarUrl) || null,
+        createdAt: Date.now(),
+        pinned: false, locked: false, views: 0,
+        reactions: {}, replies: [],
+    };
+    POSTS.unshift(post);
+    savePosts(POSTS);
+    closeComposer();
+    state.filterTag = 'all';
+    renderTagRow();
+    renderList();
+    openThread(post.id);
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>
