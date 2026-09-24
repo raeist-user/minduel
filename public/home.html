@@ -29,6 +29,11 @@
     ::-webkit-scrollbar-track { background: #121212; }
     ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 4px; }
     .btn-press:active { transform: scale(.97); }
+    /* The one fixed avatar look: brand green with dark initial. Used only
+       when the user has no profile picture. */
+    .avatar { background-color: #A3E635; color: #0D0D0D; }
+    .avatar.has-photo { background-color: #1A1A1A; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .dropdown { display: none; }
     .dropdown.open { display: block; }
 </style>
@@ -46,7 +51,7 @@
         </div>
         <div class="relative">
             <button id="profile-btn" onclick="toggleDropdown()" class="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border border-border-color bg-card-bg hover:border-accent-green/50 transition-colors duration-150">
-                <span id="nav-avatar" class="w-7 h-7 rounded-full text-app-bg flex items-center justify-center text-xs font-bold flex-shrink-0">?</span>
+                <span id="nav-avatar" class="avatar w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold flex-shrink-0">?</span>
                 <span id="nav-name" class="text-sm font-semibold">...</span>
             </button>
             <div id="dropdown" class="dropdown absolute right-0 top-[calc(100%+8px)] w-52 bg-card-bg border border-border-color rounded-xl overflow-hidden">
@@ -81,7 +86,7 @@
             </button>
 
             <div class="flex items-center gap-4 mb-8">
-                <div id="profile-avatar-big" class="w-16 h-16 rounded-full text-app-bg flex items-center justify-center text-xl font-bold flex-shrink-0">?</div>
+                <div id="profile-avatar-big" class="avatar w-16 h-16 rounded-full overflow-hidden flex items-center justify-center text-xl font-bold flex-shrink-0">?</div>
                 <div class="min-w-0">
                     <div id="profile-display-name" class="text-lg font-bold truncate">...</div>
                     <div class="text-xs text-text-secondary truncate"><span id="profile-email">...</span> · @<span id="profile-username">...</span></div>
@@ -104,7 +109,6 @@
     const token = localStorage.getItem('minduel_token');
     if (!token) window.location.href = '/index.html';
 
-    const AVATAR_COLORS = ['#A3E635', '#38BDF8', '#F472B6', '#FB923C', '#C084FC', '#F87171', '#2DD4BF', '#FACC15'];
     let currentUser = null;
 
     async function authedFetch(url, options = {}) {
@@ -127,18 +131,38 @@
         return data;
     }
 
+    // Photo if the user has one, otherwise their initial on the fixed brand color.
+    // textContent / DOM APIs only (never innerHTML) so a display name or URL
+    // can't inject markup.
+    function setAvatar(el, user) {
+        const name = user.displayName || user.username;
+        el.textContent = '';
+        if (user.avatarUrl) {
+            const img = document.createElement('img');
+            img.alt = '';
+            img.draggable = false;
+            img.onerror = () => { // broken/missing image -> fall back to initial
+                el.classList.remove('has-photo');
+                el.textContent = name.charAt(0).toUpperCase();
+            };
+            img.src = user.avatarUrl;
+            el.classList.add('has-photo');
+            el.appendChild(img);
+        } else {
+            el.classList.remove('has-photo');
+            el.textContent = name.charAt(0).toUpperCase();
+        }
+    }
+
     function renderUser(user) {
         currentUser = user;
-        const initial = (user.displayName || user.username).charAt(0).toUpperCase();
         const name = user.displayName || user.username;
 
-        document.getElementById('nav-avatar').textContent = initial;
-        document.getElementById('nav-avatar').style.background = user.avatarColor;
+        setAvatar(document.getElementById('nav-avatar'), user);
         document.getElementById('nav-name').textContent = name;
         document.getElementById('welcome-name').textContent = name;
 
-        document.getElementById('profile-avatar-big').textContent = initial;
-        document.getElementById('profile-avatar-big').style.background = user.avatarColor;
+        setAvatar(document.getElementById('profile-avatar-big'), user);
         document.getElementById('profile-display-name').textContent = name;
         document.getElementById('profile-email').textContent = user.email;
         document.getElementById('profile-username').textContent = user.username;
@@ -180,7 +204,7 @@
     }
 
     const CATEGORIES = [
-        { id: 'personalize', icon: 'palette', label: 'Personalize', desc: 'Display name & avatar color' },
+        { id: 'personalize', icon: 'palette', label: 'Personalize', desc: 'Display name & profile picture' },
         { id: 'account', icon: 'lock', label: 'Account', desc: 'Change password' },
     ];
 
@@ -203,7 +227,7 @@
         document.getElementById('profile-menu').classList.add('hidden');
         document.getElementById('profile-content').classList.remove('hidden');
         const body = document.getElementById('profile-body');
-        if (cat === 'personalize') body.innerHTML = buildPersonalizeHTML();
+        if (cat === 'personalize') { body.innerHTML = buildPersonalizeHTML(); refreshPzPreview(); }
         else body.innerHTML = buildAccountHTML();
         lucide.createIcons();
     }
@@ -213,36 +237,149 @@
     }
 
     // ── Personalize ──────────────────────────────────────────
-    let draftColor = null;
+    const AVATAR_SIZE = 256;            // output is a 256x256 square
+    const MAX_SOURCE_BYTES = 10 * 1024 * 1024; // refuse absurdly large originals up front
 
     function buildPersonalizeHTML() {
-        draftColor = currentUser.avatarColor;
         return `
+        <div class="bg-card-bg border border-border-color rounded-xl p-4 mb-4">
+            <label class="text-xs text-text-secondary block mb-3">Profile picture</label>
+            <div class="flex items-center gap-4 mb-2">
+                <div id="pz-avatar-preview" class="avatar w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-2xl font-bold flex-shrink-0"></div>
+                <div class="flex flex-col gap-2 min-w-0">
+                    <button type="button" onclick="document.getElementById('pz-file').click()" id="pz-upload-btn"
+                        class="btn-press text-sm font-semibold bg-white/5 border border-border-color hover:border-accent-green/50 rounded-lg px-4 py-2 transition-colors duration-150">
+                        Upload photo
+                    </button>
+                    <button type="button" onclick="removePhoto()" id="pz-remove-btn"
+                        class="btn-press text-xs font-semibold text-red-400 hover:text-red-300 text-left px-1 transition-colors duration-150 ${currentUser.avatarUrl ? '' : 'hidden'}">
+                        Remove photo
+                    </button>
+                </div>
+            </div>
+            <input id="pz-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="onPhotoChosen(event)">
+            <div id="pz-photo-status" class="text-xs min-h-[16px] mt-2 text-text-secondary">JPG, PNG or WebP. It will be cropped to a square.</div>
+        </div>
+
         <div class="bg-card-bg border border-border-color rounded-xl p-4 mb-4">
             <label class="text-xs text-text-secondary block mb-2">Display name</label>
             <input id="pz-displayname" type="text" maxlength="30" value="${escapeHtml(currentUser.displayName || currentUser.username)}"
-                class="w-full bg-app-bg border border-border-color rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-accent-green mb-4">
-
-            <label class="text-xs text-text-secondary block mb-2">Avatar color</label>
-            <div id="color-swatches" class="flex flex-wrap gap-2">${swatchesHTML()}</div>
+                class="w-full bg-app-bg border border-border-color rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-accent-green">
         </div>
         <div id="pz-error" class="hidden text-xs text-red-400 mb-3"></div>
         <button onclick="savePersonalize()" id="pz-save-btn"
             class="btn-press w-full bg-accent-green text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(163,230,53,0.25)]">
-            Save changes
+            Save name
         </button>`;
     }
 
-    function swatchesHTML() {
-        return AVATAR_COLORS.map(c => `
-            <button onclick="pickColor('${c}')" class="w-8 h-8 rounded-full border-2 transition-all duration-150"
-                style="background:${c}; border-color: ${draftColor === c ? '#FFFFFF' : 'transparent'};"></button>
-        `).join('');
+    function refreshPzPreview() {
+        const el = document.getElementById('pz-avatar-preview');
+        if (el) setAvatar(el, currentUser);
+        const rm = document.getElementById('pz-remove-btn');
+        if (rm) rm.classList.toggle('hidden', !currentUser.avatarUrl);
     }
 
-    function pickColor(c) {
-        draftColor = c;
-        document.getElementById('color-swatches').innerHTML = swatchesHTML();
+    function setPhotoStatus(msg, kind) {
+        const el = document.getElementById('pz-photo-status');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = 'text-xs min-h-[16px] mt-2 ' +
+            (kind === 'error' ? 'text-red-400' : kind === 'ok' ? 'text-accent-green' : 'text-text-secondary');
+    }
+
+    // Load the picked file, center-crop to a square, downscale to 256x256 and
+    // re-encode as JPEG. Re-encoding through a canvas also strips EXIF data
+    // (GPS location, camera info) from the user's photo before it leaves the phone.
+    async function fileToAvatarBlob(file) {
+        const url = URL.createObjectURL(file);
+        try {
+            const img = await new Promise((resolve, reject) => {
+                const i = new Image();
+                i.onload = () => resolve(i);
+                i.onerror = () => reject(new Error('Could not read that image. Try a different photo.'));
+                i.src = url;
+            });
+            const side = Math.min(img.naturalWidth, img.naturalHeight);
+            if (!side) throw new Error('Could not read that image. Try a different photo.');
+            const sx = (img.naturalWidth - side) / 2;
+            const sy = (img.naturalHeight - side) / 2;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = AVATAR_SIZE;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#1A1A1A'; // transparent PNGs get a dark backdrop instead of black-on-JPEG
+            ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
+
+            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+            if (!blob) throw new Error('Could not process that image.');
+            return blob;
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    async function onPhotoChosen(e) {
+        const input = e.target;
+        const file = input.files && input.files[0];
+        input.value = ''; // lets the user pick the same file again later
+        if (!file) return;
+
+        if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+            return setPhotoStatus('Please choose a JPG, PNG or WebP image.', 'error');
+        }
+        if (file.size > MAX_SOURCE_BYTES) {
+            return setPhotoStatus('That photo is too large (max 10 MB).', 'error');
+        }
+
+        const btn = document.getElementById('pz-upload-btn');
+        btn.disabled = true;
+        setPhotoStatus('Uploading...', 'info');
+        try {
+            const blob = await fileToAvatarBlob(file);
+            const res = await fetch('/api/auth/avatar', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'image/jpeg', Authorization: 'Bearer ' + token },
+                body: blob,
+            });
+            if (res.status === 401) {
+                localStorage.removeItem('minduel_token');
+                localStorage.removeItem('minduel_user');
+                window.location.href = '/index.html';
+                return;
+            }
+            let data = {};
+            try { data = await res.json(); } catch (_) {}
+            if (!res.ok) throw new Error(data.message || `Upload failed (status ${res.status})`);
+
+            renderUser(data.user);
+            localStorage.setItem('minduel_user', JSON.stringify(data.user));
+            refreshPzPreview();
+            setPhotoStatus('Profile picture updated.', 'ok');
+        } catch (err) {
+            setPhotoStatus(err.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function removePhoto() {
+        const btn = document.getElementById('pz-remove-btn');
+        btn.disabled = true;
+        setPhotoStatus('Removing...', 'info');
+        try {
+            const data = await authedFetch('/api/auth/avatar', { method: 'DELETE' });
+            renderUser(data.user);
+            localStorage.setItem('minduel_user', JSON.stringify(data.user));
+            refreshPzPreview();
+            setPhotoStatus('Photo removed.', 'ok');
+        } catch (err) {
+            setPhotoStatus(err.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     async function savePersonalize() {
@@ -262,7 +399,7 @@
         try {
             const data = await authedFetch('/api/auth/profile', {
                 method: 'PATCH',
-                body: JSON.stringify({ displayName, avatarColor: draftColor }),
+                body: JSON.stringify({ displayName }),
             });
             renderUser(data.user);
             localStorage.setItem('minduel_user', JSON.stringify(data.user));
@@ -273,7 +410,7 @@
             errEl.classList.remove('hidden');
         } finally {
             btn.disabled = false;
-            btn.textContent = 'Save changes';
+            btn.textContent = 'Save name';
         }
     }
 
