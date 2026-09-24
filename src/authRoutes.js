@@ -12,6 +12,7 @@ const {
   changePassword,
   changeUsername,
   changeEmail,
+  acceptTerms,
   forgotPassword,
   resetPassword,
 } = require('./authController');
@@ -93,6 +94,7 @@ const accountChangeLimiter = rateLimit({
 router.patch('/password', protect, accountChangeLimiter, changePassword);
 router.patch('/username', protect, accountChangeLimiter, changeUsername);
 router.patch('/email', protect, accountChangeLimiter, changeEmail);
+router.post('/accept-terms', protect, accountChangeLimiter, acceptTerms);
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', forgotPasswordLimiter, resetPassword);
 

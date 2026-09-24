@@ -1,6 +1,18 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const {
+  ROLES,
+  RESTRICTION_STATES,
+  normalizeRole,
+  badgeFor,
+  restrictionStatus,
+} = require('./moderation');
+
+// Bump this whenever the Terms of Service or Privacy Policy change in a way
+// people must re-accept. Accounts whose stored version differs get the
+// "please accept" prompt on their next visit (see `needsTerms`).
+const TERMS_VERSION = '2026-09-24';
 
 const MAX_LOGIN_ATTEMPTS = 5;
 // Players can change their username, but not constantly: once opponents see
@@ -51,11 +63,38 @@ const userSchema = new mongoose.Schema(
     avatarData: { type: Buffer, select: false },
     avatarContentType: { type: String, select: false },
 
+    // Plain string in the database: "player" (default), "moderator" or "admin".
+    // To make someone staff, edit this field on their user document (see the
+    // README) or run `npm run set-role`. The getter normalises hand-typed values
+    // (" Admin " -> "admin") and treats anything unknown as "player". The role
+    // is never read from a request body, so a client can't set its own.
     role: {
       type: String,
-      enum: ['player', 'admin'],
+      enum: ROLES,
       default: 'player',
+      get: normalizeRole,
     },
+
+    // --- Moderation: ban / suspension ---
+    // One state at a time. A suspension lifts itself when `until` passes.
+    restriction: {
+      state: { type: String, enum: RESTRICTION_STATES, default: 'none' },
+      until: { type: Date },
+      reason: { type: String, maxlength: 200 },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      at: { type: Date },
+    },
+
+    // --- Security: session invalidation ---
+    // Every login token carries the version it was issued under. Changing or
+    // resetting the password (and banning) bumps this number, which instantly
+    // invalidates every token issued before it, on every device.
+    tokenVersion: { type: Number, default: 0 },
+
+    // --- Terms / age ---
+    termsAcceptedAt: { type: Date },
+    termsVersion: { type: String },
+    ageConfirmed: { type: Boolean, default: false },
 
     // --- Rating & stats (used from Match/Results/Leaderboard features onward) ---
     rating: { type: Number, default: 1000 },
@@ -102,6 +141,10 @@ const userSchema = new mongoose.Schema(
 //   db.users.aggregate([{ $group: { _id: { $toLower: "$username" }, n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])
 userSchema.index({ username: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
 
+// Staff / moderation lists in the admin panel filter on these.
+userSchema.index({ role: 1 });
+userSchema.index({ 'restriction.state': 1 });
+
 // Hash password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
@@ -114,6 +157,9 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// The account owner's own view (login, /me, profile updates). Sensitive
+// internals are removed with a blocklist here; anything that goes to OTHER
+// people must use toPublicObject() instead, which is an allowlist.
 userSchema.methods.toSafeObject = function () {
   const obj = this.toObject();
   delete obj.password;
@@ -123,21 +169,61 @@ userSchema.methods.toSafeObject = function () {
   delete obj.lockUntil;
   delete obj.avatarData;
   delete obj.avatarContentType;
+  delete obj.tokenVersion;
+  delete obj.restriction;
+  delete obj.previousUsernames;
   delete obj.__v;
+  obj.role = this.role; // normalised value
+  obj.badge = badgeFor(this.role);
+  obj.needsTerms = this.termsVersion !== TERMS_VERSION;
   return obj;
 };
 
 // What OTHER players are allowed to see (opponent card, leaderboard, match
-// history). Deliberately an allowlist: adding a new private field to the schema
-// later can never leak by accident.
+// history, public profile). Deliberately an allowlist: adding a new private
+// field to the schema later can never leak by accident. `badge` is the staff
+// badge ("moderator" / "admin" / null), not the raw role.
+//
+// Also works on plain objects from `.lean()` queries: User.toPublic(doc).
+// Pair it with `.select(User.PUBLIC_SELECT)` so private fields never even
+// leave the database.
+const PUBLIC_SELECT = '_id username displayName avatarUrl rating role';
+const toPublic = (src) => ({
+  _id: src._id,
+  username: src.username,
+  displayName: src.displayName,
+  avatarUrl: src.avatarUrl,
+  rating: src.rating,
+  badge: badgeFor(src.role),
+});
 userSchema.methods.toPublicObject = function () {
-  return {
+  return toPublic(this);
+};
+
+// What staff see in the admin panel. Moderators never get the email; only
+// admins do (`includeEmail`).
+userSchema.methods.toStaffObject = function ({ includeEmail = false } = {}) {
+  const status = restrictionStatus(this.restriction);
+  const r = this.restriction || {};
+  const obj = {
     _id: this._id,
     username: this.username,
     displayName: this.displayName,
     avatarUrl: this.avatarUrl,
     rating: this.rating,
+    matchesPlayed: this.matchesPlayed,
+    role: this.role,
+    badge: badgeFor(this.role),
+    status,
+    restriction: status === 'active' ? null : { state: status, until: r.until || null, reason: r.reason || '' },
+    createdAt: this.createdAt,
   };
+  if (includeEmail) obj.email = this.email;
+  return obj;
+};
+
+userSchema.methods.moderationStatus = function () {
+  return restrictionStatus(this.restriction);
 };
 
 // --- Account lockout helpers ---
@@ -180,5 +266,8 @@ userSchema.methods.createPasswordResetToken = function () {
 const User = mongoose.model('User', userSchema);
 User.MAX_LOGIN_ATTEMPTS = MAX_LOGIN_ATTEMPTS;
 User.USERNAME_CHANGE_COOLDOWN_DAYS = USERNAME_CHANGE_COOLDOWN_DAYS;
+User.TERMS_VERSION = TERMS_VERSION;
+User.PUBLIC_SELECT = PUBLIC_SELECT;
+User.toPublic = toPublic;
 
 module.exports = User;
