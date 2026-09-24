@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Minduel — Home</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="brand">Minduel</div>
+    <div class="profile-menu">
+      <button class="profile-btn" id="profile-btn" onclick="toggleDropdown()">
+        <span class="avatar" id="avatar-initial">?</span>
+        <span id="nav-username">...</span>
+      </button>
+      <div class="dropdown" id="dropdown">
+        <button class="dropdown-item" onclick="openProfileModal()">Profile</button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-item danger" onclick="logout()">Log out</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <p>Home screen — coming soon. This is where Find Match will live.</p>
+  </main>
+
+  <!-- Profile modal -->
+  <div class="modal-backdrop" id="profile-backdrop" onclick="closeProfileModalOnBackdrop(event)">
+    <div class="modal">
+      <h2>Your profile</h2>
+      <div id="profile-body">
+        <div class="modal-row"><span>Loading...</span></div>
+      </div>
+      <button class="modal-close" onclick="closeProfileModal()">Close</button>
+    </div>
+  </div>
+
+<script>
+  const token = localStorage.getItem('minduel_token');
+  let cachedUser = null;
+
+  if (!token) {
+    window.location.href = '/index.html';
+  }
+
+  try {
+    cachedUser = JSON.parse(localStorage.getItem('minduel_user') || 'null');
+  } catch (e) {
+    cachedUser = null;
+  }
+
+  function renderNav(user) {
+    document.getElementById('nav-username').textContent = user.username;
+    document.getElementById('avatar-initial').textContent = user.username.charAt(0).toUpperCase();
+  }
+
+  if (cachedUser) renderNav(cachedUser);
+
+  async function fetchMe() {
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!res.ok) {
+        // token invalid/expired - send back to login
+        localStorage.removeItem('minduel_token');
+        localStorage.removeItem('minduel_user');
+        window.location.href = '/index.html';
+        return;
+      }
+      const data = await res.json();
+      cachedUser = data.user;
+      localStorage.setItem('minduel_user', JSON.stringify(cachedUser));
+      renderNav(cachedUser);
+    } catch (err) {
+      console.error('Failed to fetch profile', err);
+    }
+  }
+
+  fetchMe();
+
+  function toggleDropdown() {
+    document.getElementById('dropdown').classList.toggle('open');
+  }
+
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('profile-menu') || document.querySelector('.profile-menu');
+    if (menu && !menu.contains(e.target)) {
+      document.getElementById('dropdown').classList.remove('open');
+    }
+  });
+
+  function openProfileModal() {
+    document.getElementById('dropdown').classList.remove('open');
+    const body = document.getElementById('profile-body');
+    if (cachedUser) {
+      body.innerHTML = `
+        <div class="modal-row"><span>Username</span><span>${escapeHtml(cachedUser.username)}</span></div>
+        <div class="modal-row"><span>Email</span><span>${escapeHtml(cachedUser.email)}</span></div>
+        <div class="modal-row"><span>Rating</span><span>${cachedUser.rating}</span></div>
+        <div class="modal-row"><span>Matches played</span><span>${cachedUser.matchesPlayed}</span></div>
+        <div class="modal-row"><span>Wins</span><span>${cachedUser.wins}</span></div>
+        <div class="modal-row"><span>Losses</span><span>${cachedUser.losses}</span></div>
+      `;
+    }
+    document.getElementById('profile-backdrop').classList.add('open');
+  }
+
+  function closeProfileModal() {
+    document.getElementById('profile-backdrop').classList.remove('open');
+  }
+
+  function closeProfileModalOnBackdrop(e) {
+    if (e.target.id === 'profile-backdrop') closeProfileModal();
+  }
+
+  function logout() {
+    localStorage.removeItem('minduel_token');
+    localStorage.removeItem('minduel_user');
+    window.location.href = '/index.html';
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>
