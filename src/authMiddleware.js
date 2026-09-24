@@ -1,4 +1,15 @@
 const { authenticateToken } = require('./authCore');
+const User = require('./User');
+
+// Presence: write lastSeenAt at most every 30s per account. Fire-and-forget so
+// it never slows or fails a request.
+const PRESENCE_THROTTLE_MS = 30 * 1000;
+const touchPresence = (user) => {
+  const last = user.lastSeenAt ? new Date(user.lastSeenAt).getTime() : 0;
+  if (Date.now() - last < PRESENCE_THROTTLE_MS) return;
+  user.lastSeenAt = new Date(); // keeps this request's copy consistent
+  User.updateOne({ _id: user._id }, { $set: { lastSeenAt: user.lastSeenAt } }, { timestamps: false }).catch(() => {});
+};
 
 // Protects a route: requires a valid Bearer token belonging to an account that
 // is active, not banned/suspended, and whose token version is still current.
@@ -14,6 +25,7 @@ const protect = async (req, res, next) => {
     if (!result.ok) return res.status(result.status).json(result.body);
 
     req.user = result.user;
+    touchPresence(req.user);
     next();
   } catch (err) {
     next(err);
