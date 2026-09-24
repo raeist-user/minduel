@@ -195,10 +195,11 @@ const getMe = async (req, res, next) => {
 
 // @route   PATCH /api/auth/profile
 // @access  Private
-// Personalization only: display name + avatar color (from a fixed palette).
+// Personalization: display name only. (The profile picture has its own
+// endpoints below; avatar background colors no longer exist.)
 const updateProfile = async (req, res, next) => {
   try {
-    const { displayName, avatarColor } = req.body;
+    const { displayName } = req.body;
     const updates = {};
 
     if (displayName !== undefined) {
@@ -209,19 +210,102 @@ const updateProfile = async (req, res, next) => {
       updates.displayName = trimmed;
     }
 
-    if (avatarColor !== undefined) {
-      if (!User.AVATAR_COLORS.includes(avatarColor)) {
-        return res.status(400).json({ message: 'Invalid avatar color' });
-      }
-      updates.avatarColor = avatarColor;
-    }
-
     const user = await User.findByIdAndUpdate(req.user._id, updates, {
       new: true,
       runValidators: true,
     });
 
     res.status(200).json({ user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------- Profile picture ----------
+const MAX_AVATAR_BYTES = 150 * 1024; // the browser sends ~20-30 KB; this is just a ceiling
+
+// Never trust the Content-Type header or file extension: identify the image
+// by its actual leading bytes. Anything else (SVG, HTML, scripts) is rejected,
+// so nothing executable can be stored and served back from our origin.
+const detectImageType = (buf) => {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (
+    buf.length >= 8 &&
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+    buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a
+  ) return 'image/png';
+  if (
+    buf.length >= 12 &&
+    buf.toString('ascii', 0, 4) === 'RIFF' &&
+    buf.toString('ascii', 8, 12) === 'WEBP'
+  ) return 'image/webp';
+  return null;
+};
+
+// @route   PUT /api/auth/avatar        (body = raw image bytes)
+// @access  Private
+const uploadAvatar = async (req, res, next) => {
+  try {
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return res.status(400).json({ message: 'Send the image as a JPEG, PNG or WebP file' });
+    }
+    if (body.length > MAX_AVATAR_BYTES) {
+      return res.status(413).json({ message: 'Image is too large. Please choose a smaller photo.' });
+    }
+    const contentType = detectImageType(body);
+    if (!contentType) {
+      return res.status(400).json({ message: 'That file is not a valid JPEG, PNG or WebP image' });
+    }
+
+    // ?v= changes on every upload so browsers/CDNs never show a stale photo
+    const avatarUrl = `/api/auth/avatar/${req.user._id}?v=${Date.now()}`;
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { avatarData: body, avatarContentType: contentType, avatarUrl },
+      { new: true }
+    );
+
+    res.status(200).json({ user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route   DELETE /api/auth/avatar
+// @access  Private
+const removeAvatar = async (req, res, next) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $unset: { avatarData: 1, avatarContentType: 1 }, avatarUrl: '' },
+      { new: true }
+    );
+    res.status(200).json({ user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route   GET /api/auth/avatar/:id
+// @access  Public (avatars are shown to opponents and on leaderboards)
+const getAvatar = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      return res.status(404).end();
+    }
+    const user = await User.findById(id).select('+avatarData +avatarContentType');
+    if (!user || !user.avatarData || !user.avatarContentType) {
+      return res.status(404).end();
+    }
+    // Content-Type comes from what WE verified at upload time, never from the client.
+    res.set({
+      'Content-Type': user.avatarContentType,
+      'Cache-Control': 'public, max-age=86400',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.status(200).send(Buffer.from(user.avatarData));
   } catch (err) {
     next(err);
   }
@@ -353,6 +437,9 @@ module.exports = {
   login,
   getMe,
   updateProfile,
+  uploadAvatar,
+  removeAvatar,
+  getAvatar,
   changePassword,
   forgotPassword,
   resetPassword,

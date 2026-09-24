@@ -6,6 +6,9 @@ const {
   login,
   getMe,
   updateProfile,
+  uploadAvatar,
+  removeAvatar,
+  getAvatar,
   changePassword,
   forgotPassword,
   resetPassword,
@@ -54,6 +57,27 @@ router.post('/register', registerLimiter, register);
 router.post('/login', loginLimiter, login);
 router.get('/me', protect, getMe);
 router.patch('/profile', protect, updateProfile);
+
+// Profile picture. The image arrives as raw bytes (not JSON/base64), which
+// avoids ~33% base64 bloat and needs no extra upload library. The global
+// express.json() ignores these content types, so this parser handles them.
+// The limit is enforced here BEFORE the body is buffered into memory.
+const avatarUploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  message: { message: 'Too many photo uploads. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+router.put(
+  '/avatar',
+  protect,
+  avatarUploadLimiter,
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '150kb' }),
+  uploadAvatar
+);
+router.delete('/avatar', protect, removeAvatar);
+router.get('/avatar/:id', getAvatar);
 router.patch('/password', protect, changePassword);
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', forgotPasswordLimiter, resetPassword);

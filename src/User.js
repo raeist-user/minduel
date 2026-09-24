@@ -2,13 +2,6 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
-// Fixed palette so avatarColor can't be used to inject arbitrary CSS/values.
-// Keep this in sync with AVATAR_COLORS in the frontend.
-const AVATAR_COLORS = [
-  '#A3E635', '#38BDF8', '#F472B6', '#FB923C',
-  '#C084FC', '#F87171', '#2DD4BF', '#FACC15',
-];
-
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -46,15 +39,13 @@ const userSchema = new mongoose.Schema(
       maxlength: 30,
       default: '',
     },
-    avatarColor: {
-      type: String,
-      enum: AVATAR_COLORS,
-      default: AVATAR_COLORS[0],
-    },
-    avatarUrl: {
-      type: String,
-      default: '',
-    },
+    // Profile picture. The image bytes live in avatarData (select:false so
+    // they never ride along on normal user queries). avatarUrl is what the
+    // frontend uses; it is empty when the user has no photo, in which case the
+    // UI shows their initial on the fixed brand color.
+    avatarUrl: { type: String, default: '' },
+    avatarData: { type: Buffer, select: false },
+    avatarContentType: { type: String, select: false },
 
     role: {
       type: String,
@@ -120,6 +111,8 @@ userSchema.methods.toSafeObject = function () {
   delete obj.resetPasswordExpires;
   delete obj.failedLoginAttempts;
   delete obj.lockUntil;
+  delete obj.avatarData;
+  delete obj.avatarContentType;
   delete obj.__v;
   return obj;
 };
@@ -162,7 +155,6 @@ userSchema.methods.createPasswordResetToken = function () {
 };
 
 const User = mongoose.model('User', userSchema);
-User.AVATAR_COLORS = AVATAR_COLORS;
 User.MAX_LOGIN_ATTEMPTS = MAX_LOGIN_ATTEMPTS;
 
 module.exports = User;
