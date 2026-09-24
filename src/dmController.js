@@ -21,7 +21,8 @@ const shape = (m) => ({ _id: m._id, sender: m.sender, text: m.text, createdAt: m
 const listConversations = async (req, res, next) => {
   try {
     const me = String(req.user._id);
-    const convs = await Conversation.find({ participants: req.user._id, 'lastMessage.at': { $exists: true } })
+    const cutoff = new Date(Date.now() - Message.RETENTION_MS);
+    const convs = await Conversation.find({ participants: req.user._id, 'lastMessage.at': { $gte: cutoff } })
       .sort({ 'lastMessage.at': -1 })
       .limit(50)
       .lean();
@@ -79,7 +80,7 @@ const getMessages = async (req, res, next) => {
     let messages = [], hasMore = false;
     if (conv) {
       const { after, before } = req.query;
-      const q = { conversation: conv._id };
+      const q = { conversation: conv._id, createdAt: { $gte: new Date(Date.now() - Message.RETENTION_MS) } };
       if (typeof after === 'string' && OBJECT_ID.test(after)) {
         q._id = { $gt: after };
         messages = await Message.find(q).sort({ _id: 1 }).limit(100).lean();

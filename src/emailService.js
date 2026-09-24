@@ -73,10 +73,10 @@ const sendPasswordResetEmail = async ({ to, resetUrl }) => {
 
   const html = `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>Reset your Minduel password</h2>
+      <h2>Reset your Aptiks password</h2>
       <p>We received a request to reset your password. This link expires in 1 hour.</p>
       <p style="margin: 24px 0;">
-        <a href="${resetUrl}" style="background:#A3E635;color:#0D0D0D;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;">
+        <a href="${resetUrl}" style="background:#E2B714;color:#0D0D0D;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;">
           Reset Password
         </a>
       </p>
@@ -86,14 +86,14 @@ const sendPasswordResetEmail = async ({ to, resetUrl }) => {
   `;
 
   const text =
-    `Reset your Minduel password\n\n` +
+    `Reset your Aptiks password\n\n` +
     `We received a request to reset your password. This link expires in 1 hour:\n${resetUrl}\n\n` +
     `If you didn't request this, you can safely ignore this email.`;
 
   const info = await getTransporter().sendMail({
-    from: process.env.EMAIL_FROM || 'Minduel <no-reply@minduel.app>',
+    from: process.env.EMAIL_FROM || 'Aptiks <no-reply@aptiks.app>',
     to,
-    subject: 'Reset your Minduel password',
+    subject: 'Reset your Aptiks password',
     text, // plain-text alternative also helps deliverability / spam scoring
     html,
   });

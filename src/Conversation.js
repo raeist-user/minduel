@@ -18,6 +18,9 @@ const conversationSchema = new mongoose.Schema(
 );
 
 conversationSchema.index({ participants: 1, 'lastMessage.at': -1 });
+// When the newest message is 30 days old, every message in it is gone too (see
+// Message.js), so the empty conversation goes with them.
+conversationSchema.index({ 'lastMessage.at': 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 conversationSchema.statics.makePairKey = (a, b) => [String(a), String(b)].sort().join('_');
 
 module.exports = mongoose.model('Conversation', conversationSchema);

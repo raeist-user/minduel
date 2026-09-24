@@ -199,20 +199,19 @@ userSchema.methods.toSafeObject = function () {
 
 // What OTHER players are allowed to see (opponent card, leaderboard, match
 // history, public profile). Deliberately an allowlist: adding a new private
-// field to the schema later can never leak by accident. `badge` is the staff
-// badge ("moderator" / "admin" / null), not the raw role.
+// field to the schema later can never leak by accident. Staff badges and roles
+// are NOT public: only you (toSafeObject) and staff (toStaffObject) see them.
 //
 // Also works on plain objects from `.lean()` queries: User.toPublic(doc).
 // Pair it with `.select(User.PUBLIC_SELECT)` so private fields never even
 // leave the database.
-const PUBLIC_SELECT = '_id username displayName avatarUrl rating role';
+const PUBLIC_SELECT = '_id username displayName avatarUrl rating';
 const toPublic = (src) => ({
   _id: src._id,
   username: src.username,
   displayName: src.displayName,
   avatarUrl: src.avatarUrl,
   rating: src.rating,
-  badge: badgeFor(src.role),
 });
 userSchema.methods.toPublicObject = function () {
   return toPublic(this);
