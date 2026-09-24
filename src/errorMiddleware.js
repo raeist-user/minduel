@@ -5,6 +5,8 @@ const notFound = (req, res, next) => {
 
 // Central error handler - keep this as the LAST middleware in server.js
 const errorHandler = (err, req, res, next) => {
+  console.error('ERROR:', err);
+
   let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   let message = err.message || 'Server error';
 
