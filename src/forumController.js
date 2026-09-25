@@ -125,7 +125,7 @@ const getPost = async (req, res, next) => {
     const { id } = req.params;
     if (!OBJECT_ID.test(id)) return res.status(404).json({ message: 'Post not found' });
 
-    const post = await Post.findOne({ _id: id, deleted: false });
+    const post = await Post.findOne({ _id: id, deleted: false }).select('+viewedBy');
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
     // Count a view once per user, not once per request.
