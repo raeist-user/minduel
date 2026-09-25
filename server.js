@@ -2,9 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
 const mongoose = require('mongoose');
 const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
+const { Server } = require('socket.io');
 const connectDB = require('./src/db');
 const authRoutes = require('./src/authRoutes');
 const adminRoutes = require('./src/adminRoutes');
@@ -13,6 +15,8 @@ const friendRoutes = require('./src/friendRoutes');
 const dmRoutes = require('./src/dmRoutes');
 const { verifyEmailSetup } = require('./src/emailService');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
+const { socketAuth } = require('./src/socketAuth');
+const { MatchManager } = require('./src/game/MatchManager');
 
 const app = express();
 
@@ -79,8 +83,21 @@ app.use('/api/dm', dmRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
+// --- Real-time (Socket.io): parties, matchmaking, live games ---
+// Wraps the same Express app in a plain http.Server so HTTP and WebSocket
+// traffic share one port (what Render/most hosts expect).
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: allowedOrigins.length ? allowedOrigins : '*', credentials: true },
+});
+io.use(socketAuth);
+app.set('io', io); // lets adminController.kickUser() reach live sockets from an HTTP request
+
+const matchManager = new MatchManager(io);
+io.on('connection', (socket) => matchManager.attach(socket));
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`Aptiks backend running on port ${PORT}`);
   // Report email status in the logs right away so a misconfigured SMTP
   // setup is obvious at deploy time, not when a user first needs a reset.

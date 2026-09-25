@@ -325,3 +325,73 @@ Atlas → Database Access → create a user, use its connection string as
 - DMs are deleted after 30 days (TTL indexes in `Message.js` / `Conversation.js`; Mongoose creates them at startup, so keep `autoIndex` on or create them manually in production).
 - Accent color is `#E2B714` (Monkeytype yellow); presence dots and success text use `#4ADE80`.
 - Browser storage keys are still prefixed `minduel_` on purpose, so renaming the app does not sign everyone out.
+
+## Real-time games (Socket.io)
+
+Live matches run over Socket.io, authenticated with the same JWT as the REST
+API (see `src/socketAuth.js`). Everything game-related lives under `src/game/`:
+
+```
+src/game/BaseGame.js         # shared match-state-machine plumbing every game extends
+src/game/env.js               # bridges a BaseGame to a real Socket.io room (emit/timers/finish)
+src/game/registry.js          # game id -> class, + which ids Random Matchmaking can pick
+src/game/rating.js            # Elo for 2..n players; bots count for half weight
+src/game/bots.js              # bot names + skill/mood, so bot matches feel human
+src/game/settle.js            # turns a finished game into rating/stat updates + MatchHistory row
+src/game/MatchManager.js      # parties (join codes), matchmaking queues, match lifecycle, reconnects
+src/game/wikiClient.js        # talks to the real Wikipedia API for Wiki Race link validation
+src/game/util.js              # seeded-friendly rng/math helpers shared by every game
+src/game/data/                # texts, word dictionary, categories (animals/presidents/countries/fast food), wiki start/target pairs
+src/game/games/
+  mathduel.js                  # 10 questions, rating-banded topics (arithmetic -> quadratics -> algebra -> calculus -> advanced)
+  wpmduel.js                    # typing race: 30s paragraph mode, or 10-sentence speed mode
+  wordchain.js                  # last-letter word chain, 3 hearts, dictionary-checked
+  spellthemost.js               # type as many valid category items as you can before time's up
+  guesscountry.js                # same shuffled country sequence for everyone, own pace, shared timer
+  wikirace.js                    # same start/target Wikipedia page, first to click through wins
+src/MatchHistory.js            # one row per finished match (players, ranks, rating deltas)
+```
+
+**Client socket events** (all under the same JWT-authenticated connection):
+- `party:create` / `party:join` / `party:leave` / `party:invite` / `party:start`
+- `queue:join` (`{ gameId: 'random' | 'mathduel' | ... , settings }`) / `queue:leave`
+- `match:action` (`{ matchId, msg }` — forwarded straight to the game's `handle()`)
+- `match:leave` (explicit forfeit / "leave" button)
+
+**Server -> client events**: `party:update`, `party:invited`, `queue:waiting`,
+`match:found` (roster + `publicInit()` + a 3s countdown), `match:event` (every
+`env.emit`/`env.emitTo` a game sends — `{ type, data }`), `match:end`
+(rankings + rating deltas), `match:aborted`, `match:resync` (sent automatically
+on reconnect if you had an active match).
+
+**Bots**: if a queue wait passes ~12s, or a party starts with only one real
+player, an empty seat is filled with a bot built by `bots.js` — skill centered
+on the human(s)' own rating/typing speed with per-match "form" (mood) so it
+isn't a fixed wall. Rating changes from a bot match are halved (`rating.js`),
+so they can't be farmed and a bad bot match doesn't cost a full loss.
+
+**Disconnects**: a dropped connection gets a 20s grace period
+(`DISCONNECT_GRACE_MS` in `MatchManager.js`) before counting as a forfeit —
+enough for a phone to reconnect after a tab switch or a brief signal drop —
+and reconnecting mid-match resyncs the roster + a live `snapshot()` of game
+state rather than restarting.
+
+**MathDuel topic bands** (`games/mathduel.js` -> `BANDS`): 1000-1200
+arithmetic, 1200-1500 adds quadratics (per the brief); 1500+ algebra &
+sequences, 1800+ calculus & counting, 2100+ advanced — all easy to retune
+(just numbers) and reshuffle (topics are just arrays).
+
+**Wiki Race** needs outbound network access to `en.wikipedia.org` in
+production (`wikiClient.js`); tests inject a fake `env.wiki` instead (see
+`test/run.js`) so the game logic itself has no network dependency.
+
+### Tests
+`node test/run.js` — offline, deterministic (fake clock + seeded RNG in
+`test/harness.js`), runs every game to completion including full bot-vs-bot
+matches, plus rating math and bot generation. No DB or network needed.
+
+### Setup note
+`npm install` will need to fetch `socket.io` (added to `package.json`) — it
+wasn't installable from this sandbox (no outbound network here), so it hasn't
+been test-installed; it's a very standard, stable package so this should be a
+non-issue on your machine / Render.
