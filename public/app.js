@@ -944,13 +944,14 @@ function renderPlayer(u) {
     const shows = u.relation === 'friend' || u.relation === 'self';
     const name = u.displayName || u.username;
 
-    body.append(h('div', { class: 'flex flex-col items-center text-center mb-6' },
-        avatarEl(u, 'w-24 h-24', 'text-3xl', shows ? u.online : undefined),
-        h('div', { class: 'flex items-center justify-center gap-2 mt-4 min-w-0 max-w-full' },
-            h('div', { class: 'text-xl font-bold truncate' }, name), badgeEl(u.badge)),
-        h('div', { class: 'text-sm text-text-secondary' }, '@' + u.username),
-        shows && u.relation !== 'self' ? h('div', { class: 'text-xs mt-2 font-semibold ' + (u.online ? 'text-online' : 'text-text-muted') }, presenceText(u)) : null));
-    const about = aboutEl(u, true);
+    body.append(h('div', { class: 'flex items-center gap-4 mb-6' },
+        avatarEl(u, 'w-20 h-20', 'text-2xl', shows ? u.online : undefined),
+        h('div', { class: 'min-w-0 flex-1' },
+            h('div', { class: 'flex items-center gap-2 min-w-0' },
+                h('div', { class: 'text-xl font-bold truncate' }, name), badgeEl(u.badge)),
+            h('div', { class: 'text-sm text-text-secondary truncate' }, '@' + u.username),
+            shows && u.relation !== 'self' ? h('div', { class: 'text-xs mt-1 font-semibold ' + (u.online ? 'text-online' : 'text-text-muted') }, presenceText(u)) : null)));
+    const about = aboutEl(u, false);
     if (about) body.append(h('div', { class: 'mb-6' }, about));
 
     if (shows && u.stats) {
@@ -1381,8 +1382,15 @@ const SOCIAL_FIELDS = [
     ['youtube', 'YouTube', 'handle'], ['twitch', 'Twitch', 'username'], ['discord', 'Discord', 'username'],
     ['website', 'Website', 'yoursite.com'],
 ];
+const SOCIAL_FIELD_MAP = Object.fromEntries(SOCIAL_FIELDS.map((f) => [f[0], f]));
+
+// Working list of links while the About panel is open: [{ key, value }].
+// Kept separate from currentUser so unsaved edits don't leak elsewhere.
+let abLinks = [];
+
 function buildAboutHTML() {
     const links = currentUser.socialLinks || {};
+    abLinks = SOCIAL_FIELDS.filter(([k]) => links[k]).map(([k]) => ({ key: k, value: links[k] }));
     return `
     <div class="bg-card-bg border border-border-color rounded-2xl p-4 mb-4">
         <div class="text-sm font-semibold mb-1">About you</div>
@@ -1396,14 +1404,18 @@ function buildAboutHTML() {
         <input id="ab-location" maxlength="30" class="field w-full rounded-lg px-3 py-2.5 text-sm mb-4" placeholder="City, country" value="${escapeHtml(currentUser.location || '')}">
 
         <div class="text-xs text-text-secondary mb-2">Links</div>
-        <div class="flex flex-col gap-2 mb-3">
-            ${SOCIAL_FIELDS.map(([k, label, ph]) => `
-            <div class="flex items-center gap-2">
-                <span class="w-20 shrink-0 text-xs text-text-secondary">${label}</span>
-                <input id="ab-${k}" maxlength="100" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${ph}"
-                    class="field flex-1 min-w-0 rounded-lg px-3 py-2 text-sm" value="${escapeHtml(links[k] || '')}">
-            </div>`).join('')}
+        <div id="ab-links-list" class="flex flex-col gap-2 mb-3"></div>
+
+        <div class="flex items-center gap-2 mb-3">
+            <select id="ab-add-platform" class="field rounded-lg pl-3 pr-8 py-2 text-sm w-28 shrink-0"></select>
+            <input id="ab-add-value" maxlength="100" autocomplete="off" autocapitalize="none" spellcheck="false"
+                class="field flex-1 min-w-0 rounded-lg px-3 py-2 text-sm" placeholder="username">
+            <button type="button" onclick="addAboutLink()" id="ab-add-btn" aria-label="Add link"
+                class="btn-press shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-pill-bg border border-border-color text-text-secondary hover:text-accent hover:border-accent/50 transition-colors duration-150">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
         </div>
+
         <div id="ab-error" class="hidden text-xs mb-3"></div>
         <button onclick="saveAbout()" id="ab-save-btn"
             class="btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl shadow-[0_0_15px_rgba(226,183,20,0.25)]">
@@ -1411,17 +1423,68 @@ function buildAboutHTML() {
         </button>
     </div>`;
 }
+
+// Redraws the added-link rows and the platform dropdown (only platforms not
+// already added are offered, so the same one can't be added twice).
+function renderAboutLinks() {
+    const list = $('ab-links-list');
+    if (!list) return;
+    list.innerHTML = abLinks.length ? '' : '<p class="text-xs text-text-muted">No links added yet.</p>';
+    abLinks.forEach(({ key, value }, i) => {
+        const [, label] = SOCIAL_FIELD_MAP[key];
+        const row = h('div', { class: 'flex items-center gap-2' },
+            h('span', { class: 'w-20 shrink-0 text-xs text-text-secondary truncate' }, label),
+            h('span', { class: 'field flex-1 min-w-0 rounded-lg px-3 py-2 text-sm truncate' }, value),
+            h('button', { type: 'button', 'aria-label': 'Remove ' + label, onclick: () => removeAboutLink(i),
+                class: 'btn-press shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-text-secondary hover:text-red-400 transition-colors duration-150' },
+                h('i', { 'data-lucide': 'x', class: 'w-4 h-4' })));
+        list.append(row);
+    });
+
+    const remaining = SOCIAL_FIELDS.filter(([k]) => !abLinks.some((l) => l.key === k));
+    const sel = $('ab-add-platform');
+    const addRow = sel ? sel.closest('.flex') : null;
+    sel.innerHTML = remaining.map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
+    if (addRow) addRow.classList.toggle('hidden', !remaining.length);
+    const val = $('ab-add-value');
+    const updatePh = () => { val.placeholder = sel.value ? (SOCIAL_FIELD_MAP[sel.value][2]) : ''; };
+    sel.onchange = updatePh;
+    updatePh();
+    icons();
+}
+
+function addAboutLink() {
+    hideMsg('ab-error');
+    const sel = $('ab-add-platform');
+    const val = $('ab-add-value');
+    const key = sel.value;
+    const value = val.value.trim();
+    if (!key) return;
+    if (!value) return showMsg('ab-error', 'Enter a username or link first.', 'error');
+    abLinks.push({ key, value });
+    val.value = '';
+    renderAboutLinks();
+}
+
+function removeAboutLink(i) {
+    abLinks.splice(i, 1);
+    renderAboutLinks();
+}
+
 function wireAbout() {
     const bio = $('ab-bio');
     if (!bio) return;
     const upd = () => { $('ab-count').textContent = bio.value.length + ' / 160'; };
     bio.addEventListener('input', upd);
     upd();
+    renderAboutLinks();
 }
 async function saveAbout() {
     hideMsg('ab-error');
+    // Send every known key: '' clears a link that was removed from the list.
     const socialLinks = {};
-    SOCIAL_FIELDS.forEach(([k]) => { socialLinks[k] = $('ab-' + k).value.trim(); });
+    SOCIAL_FIELDS.forEach(([k]) => { socialLinks[k] = ''; });
+    abLinks.forEach(({ key, value }) => { socialLinks[key] = value; });
     setBusy('ab-save-btn', true, 'Save', 'Saving...');
     try {
         const data = await authedFetch('/api/auth/profile', {
@@ -1431,10 +1494,10 @@ async function saveAbout() {
         renderUser(data.user);
         saveLocalUser(data.user);
         // show what the server actually kept (e.g. a pasted link reduced to a username)
-        SOCIAL_FIELDS.forEach(([k]) => { $('ab-' + k).value = (data.user.socialLinks && data.user.socialLinks[k]) || ''; });
+        const kept = data.user.socialLinks || {};
+        abLinks = SOCIAL_FIELDS.filter(([k]) => kept[k]).map(([k]) => ({ key: k, value: kept[k] }));
         $('ab-bio').value = data.user.bio || '';
         wireAbout();
-        icons();
         showMsg('ab-error', 'Saved.', 'ok');
     } catch (err) {
         showMsg('ab-error', err.message, 'error');
