@@ -14,6 +14,7 @@
 </script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="/socket.io/socket.io.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
     tailwind.config = {
@@ -56,10 +57,13 @@
     .nav-item.active { color: #E2B714; }
     .nav-item.active svg { stroke-width: 2.4; }
 
-    /* Tag chips */
+    /* Tag chips (composer) */
     .tag-chip { border: 1px solid #3A3A3A; color: #A2A2A2; white-space: nowrap; transition: all .15s; }
     .tag-chip.active { border-color: transparent; color: #171717; }
     .tag-icon { width: 13px; height: 13px; flex-shrink: 0; }
+
+    /* Topic icon + label on a post card/thread: muted, never the tag's bright color */
+    .post-topic-icon, .post-topic-label { color: #747474 !important; }
 
     /* Sort segmented control (used inside filter dropdowns) */
     .seg-btn { color: #747474; transition: all .15s; }
@@ -68,6 +72,7 @@
     /* Filter trigger button */
     .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; }
     .filter-btn.has-active { border-color: #E2B714; color: #E2B714; }
+    .filter-btn.is-open { border-color: #4A4A4A; color: #FFFFFF; }
 
     /* Filter dropdown panel */
     .filter-panel { background: #1E1E1E; border: 1px solid #3A3A3A; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
@@ -141,35 +146,40 @@
             <div class="relative">
                 <i data-lucide="search" class="w-3.5 h-3.5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
                 <input id="search-input" placeholder="Search posts" autocomplete="off"
-                    class="field w-full rounded-lg pl-9 pr-3 py-2 text-sm" oninput="renderList()">
+                    class="field w-full rounded-lg pl-9 pr-3 py-2 text-sm">
             </div>
         </div>
 
-        <!-- Filter bar: one icon button opens Sort / Topic / Display -->
-        <div class="flex-shrink-0 px-5 pt-3 pb-3 relative">
-            <div class="flex items-center gap-2">
-                <button id="filter-toggle-btn" onclick="toggleFilterPanel()" aria-label="Filters" title="Filters"
+        <!-- Filter bar: three independent dropdown buttons (Sort / Topic / Display) -->
+        <div class="flex-shrink-0 px-5 pt-3 pb-3 flex items-center gap-2">
+            <div class="relative">
+                <button id="sort-toggle-btn" onclick="toggleDropdown('sort')" aria-label="Sort"
                     class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
-                    <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
-                    <span>Filters</span>
+                    <i data-lucide="arrow-up-down" class="w-3.5 h-3.5"></i>
+                    <span id="sort-toggle-label">Recent activity</span>
+                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
                 </button>
-                <div id="active-filter-chips" class="flex items-center gap-1.5 overflow-x-auto" style="scrollbar-width:none"></div>
+                <div id="sort-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
             </div>
 
-            <!-- Filter panel -->
-            <div id="filter-panel" class="filter-panel hidden absolute left-5 right-5 top-[calc(100%+6px)] z-30 rounded-xl p-3">
-                <div class="mb-3">
-                    <div class="text-[11px] font-semibold text-text-muted mb-1.5 px-1">Sort by</div>
-                    <div id="sort-options" class="flex flex-col"></div>
-                </div>
-                <div class="mb-3">
-                    <div class="text-[11px] font-semibold text-text-muted mb-1.5 px-1">Topic</div>
-                    <div id="topic-options" class="flex flex-col"></div>
-                </div>
-                <div>
-                    <div class="text-[11px] font-semibold text-text-muted mb-1.5 px-1">Display</div>
-                    <div id="display-options" class="flex flex-col"></div>
-                </div>
+            <div class="relative">
+                <button id="topic-toggle-btn" onclick="toggleDropdown('topic')" aria-label="Topic"
+                    class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                    <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                    <span id="topic-toggle-label">All topics</span>
+                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                </button>
+                <div id="topic-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
+            </div>
+
+            <div class="relative">
+                <button id="display-toggle-btn" onclick="toggleDropdown('display')" aria-label="Display"
+                    class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                    <i data-lucide="rows-3" class="w-3.5 h-3.5"></i>
+                    <span id="display-toggle-label">Full</span>
+                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                </button>
+                <div id="display-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
             </div>
         </div>
 
@@ -277,16 +287,70 @@
 
 <script>
 // ───────────────────────────────────────────────────────────────────────
-// Community — a Discord-forum-style tab for Aptiks.
-// Standalone prototype: reads the same auth/user data as the rest of the
-// app (minduel_token / minduel_user from localStorage) but keeps its own
-// posts in localStorage for now. When this gets folded into the main
-// codebase, swap loadPosts/savePosts/submitPost/submitReply for real
-// API calls and keep the rendering functions as-is.
+// Forums — synced with the Aptiks backend (MongoDB via /api/forum/*),
+// live-updated over the same Socket.io connection the rest of the app
+// uses. No local example data, no localStorage post store: everything
+// here is either fetched from the server or pushed to it in real time.
 // ───────────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'aptiks_community_posts_v1';
-const VIEWED_KEY = 'aptiks_community_viewed_v1';
+const $ = (id) => document.getElementById(id);
+
+// ── Session (same convention as app.js: minduel_token in localStorage) ──
+let token = localStorage.getItem('minduel_token');
+if (!token) {
+    window.location.replace('/index.html');
+    throw new Error('No session');
+}
+let currentUser = null; // populated from GET /api/auth/me before first render
+
+function sessionExpired(notice) {
+    localStorage.removeItem('minduel_token');
+    localStorage.removeItem('minduel_user');
+    if (notice) sessionStorage.setItem('minduel_notice', notice);
+    window.location.replace('/index.html');
+}
+
+async function authedFetch(url, options = {}) {
+    let res;
+    try {
+        res = await fetch(url, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: 'Bearer ' + token,
+                ...(options.headers || {}),
+            },
+        });
+    } catch (_) {
+        throw new Error('Could not reach the server.');
+    }
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+    if (res.status === 403 && (data.code === 'BANNED' || data.code === 'SUSPENDED')) {
+        let msg = data.message;
+        if (data.code === 'SUSPENDED' && data.until) {
+            msg += ' It ends ' + new Date(data.until).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + '.';
+        }
+        sessionExpired(msg);
+        throw new Error(data.message);
+    }
+    if (res.status === 401) {
+        sessionExpired(data.code === 'SESSION_REVOKED' ? data.message : '');
+        throw new Error('Session expired');
+    }
+    if (!res.ok) {
+        const err = new Error(data.message || 'Request failed');
+        err.status = res.status;
+        throw err;
+    }
+    return data;
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
 
 const TAGS = [
     { id: 'general',  name: 'General',      color: '#60A5FA', icon: 'message-square' },
@@ -306,207 +370,196 @@ const DISPLAYS = [
     { id: 'compact', name: 'Compact',     icon: 'list' },
     { id: 'title',   name: 'Title only',  icon: 'menu' },
 ];
+const tagMeta = (id) => TAGS.find((t) => t.id === id) || { name: id, color: '#A2A2A2', icon: 'hash' };
+const isStaffRole = (role) => role === 'moderator' || role === 'admin';
 
-const $ = (id) => document.getElementById(id);
-
-function currentUser() {
-    try { return JSON.parse(localStorage.getItem('minduel_user') || 'null'); }
-    catch { return null; }
-}
-function isStaff() {
-    const u = currentUser();
-    return !!u && (u.role === 'admin' || u.role === 'moderator');
-}
-function myKey() {
-    const u = currentUser();
-    return (u && (u.username || u.displayName)) || 'guest';
-}
-
-// ── state ────────────────────────────────────────────────────────────
 const state = {
     filterTag: 'all',
     sort: 'active',
-    display: 'full',
+    display: localStorage.getItem('aptiks_forums_display_v1') || 'full',
     search: '',
     currentPostId: null,
     composerTag: TAGS[0].id,
-    filterPanelOpen: false,
+    openDropdown: null,   // 'sort' | 'topic' | 'display' | null
     reactPickerOpenFor: null,
+    posts: [],            // current list page, from the server
+    thread: null,         // full post + replies, from the server, while a thread is open
+    loadingList: false,
 };
 
-// ── persistence ──────────────────────────────────────────────────────
-function loadPosts() {
-    let posts;
-    try { posts = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }
-    catch { posts = null; }
-    if (!posts) { posts = seedPosts(); savePosts(posts); }
-    return posts;
-}
-function savePosts(posts) { localStorage.setItem(STORAGE_KEY, JSON.stringify(posts)); }
-function getViewed() {
-    try { return JSON.parse(localStorage.getItem(VIEWED_KEY) || '[]'); }
-    catch { return []; }
-}
-function markViewed(id) {
-    const v = getViewed();
-    if (!v.includes(id)) { v.push(id); localStorage.setItem(VIEWED_KEY, JSON.stringify(v)); return true; }
-    return false;
-}
+// Posts the current tab has already opened this session, so a re-render
+// doesn't lose the dimmed state. The server is the source of truth for
+// view *counts*; this is purely a local "have I clicked this" memory so a
+// page reload naturally forgets it, matching how visited link styling works
+// in a browser.
+const viewedThisSession = new Set();
 
-function seedPosts() {
-    const now = Date.now();
-    const hr = 3600000, day = 86400000;
-    return [
-        {
-            id: 'p1', tag: 'strategy', title: 'Best openings against faster solvers?',
-            body: "I keep losing the first few seconds of duels to people who clearly have their patterns memorized. What's everyone's approach to the opening few moves — do you have a fixed routine or do you read the board fresh every time?",
-            authorId: 'u_mira', authorName: 'mira', authorAvatar: null,
-            createdAt: now - 6 * hr, pinned: true, locked: false, views: 214,
-            reactions: { '👍': ['sam', 'kai'], '🔥': ['jo'] },
-            replies: [
-                { id: 'r1', body: "I drill the same 10 opening patterns every morning. After a week it stops being 'reading' and starts being recognition.", authorId: 'u_sam', authorName: 'sam', authorAvatar: null, createdAt: now - 5 * hr, reactions: { '👍': ['mira'] } },
-                { id: 'r2', body: 'Honestly just play more. Pattern memorization only gets you so far before opponents adapt.', authorId: 'u_kai', authorName: 'kai', authorAvatar: null, createdAt: now - 4 * hr, reactions: {} },
-            ],
-        },
-        {
-            id: 'p2', tag: 'bugs', title: 'Rating not updating after last match',
-            body: 'Won a duel about 20 minutes ago and my rating on the leaderboard still shows the old number. Refreshed a few times, still stuck. Anyone else seeing this?',
-            authorId: 'u_devon', authorName: 'devon', authorAvatar: null,
-            createdAt: now - 20 * 60000, pinned: false, locked: false, views: 58,
-            reactions: { '👍': ['ash'] },
-            replies: [
-                { id: 'r3', body: 'Same here, started a couple hours ago for me.', authorId: 'u_ash', authorName: 'ash', authorAvatar: null, createdAt: now - 15 * 60000, reactions: {} },
-            ],
-        },
-        {
-            id: 'p3', tag: 'feedback', title: 'Would love a rematch button',
-            body: "Small thing, but after a duel ends it'd be great to send a rematch request to the same opponent instead of going back through matchmaking.",
-            authorId: 'u_jo', authorName: 'jo', authorAvatar: null,
-            createdAt: now - 2 * day, pinned: false, locked: false, views: 132,
-            reactions: { '🔥': ['mira', 'sam', 'kai'], '👍': ['devon'] },
-            replies: [],
-        },
-        {
-            id: 'p4', tag: 'offtopic', title: 'What music do you duel to?',
-            body: "Lo-fi puts me to sleep mid-match apparently. Currently running on instrumental drum and bass. What's everyone else's ranked-match soundtrack?",
-            authorId: 'u_ash', authorName: 'ash', authorAvatar: null,
-            createdAt: now - 5 * day, pinned: false, locked: true, views: 301,
-            reactions: { '😂': ['jo', 'devon'] },
-            replies: [
-                { id: 'r4', body: 'Dead silence. Any music and I start tapping along instead of thinking.', authorId: 'u_kai', authorName: 'kai', authorAvatar: null, createdAt: now - 4 * day, reactions: {} },
-            ],
-        },
-    ];
-}
-
-let POSTS = [];
-
-// ── init ─────────────────────────────────────────────────────────────
-function init() {
-    POSTS = loadPosts();
-    state.display = localStorage.getItem('aptiks_community_display_v1') || 'full';
-    renderFilterPanel();
-    renderActiveFilterChips();
-    renderComposerTags();
+// ── Socket.io: live updates ──────────────────────────────────────────
+const socket = io({ auth: { token } });
+socket.on('connect_error', (err) => {
+    // Auth failures here mean the same expired/invalid session as the API;
+    // route through the same sessionExpired flow rather than failing silently.
+    if (err && err.data && err.data.status === 401) sessionExpired(err.data.code === 'SESSION_REVOKED' ? err.message : '');
+});
+socket.on('forum:post-created', (post) => {
+    if (state.filterTag !== 'all' && post.tag !== state.filterTag) return;
+    if (!state.posts.some((p) => p._id === post._id)) {
+        state.posts.unshift(post);
+        renderList();
+    }
+});
+socket.on('forum:reply-created', ({ postId, reply }) => {
+    if (state.thread && state.thread._id === postId) {
+        state.thread.replies.push(reply);
+        renderThread();
+    }
+    const p = state.posts.find((p) => p._id === postId);
+    if (p) { p.replyCount = (p.replyCount || 0) + 1; renderList(); }
+});
+socket.on('forum:reaction-updated', ({ postId, replyId, emoji, userId, added }) => {
+    const applyTo = (item) => {
+        if (!item.reactions) item.reactions = {};
+        const list = item.reactions[emoji] || [];
+        const has = list.includes(userId);
+        if (added && !has) item.reactions[emoji] = [...list, userId];
+        if (!added && has) item.reactions[emoji] = list.filter((u) => u !== userId);
+        if (!item.reactions[emoji] || !item.reactions[emoji].length) delete item.reactions[emoji];
+    };
+    if (state.thread && state.thread._id === postId) {
+        applyTo(replyId ? state.thread.replies.find((r) => r._id === replyId) : state.thread);
+        renderThread();
+    }
+    if (!replyId) {
+        const p = state.posts.find((p) => p._id === postId);
+        if (p) { applyTo(p); renderList(); }
+    }
+});
+socket.on('forum:post-updated', ({ postId, pinned, locked }) => {
+    const p = state.posts.find((p) => p._id === postId);
+    if (p) { p.pinned = pinned; p.locked = locked; renderList(); }
+    if (state.thread && state.thread._id === postId) { state.thread.pinned = pinned; state.thread.locked = locked; renderThread(); }
+});
+socket.on('forum:post-deleted', ({ postId }) => {
+    state.posts = state.posts.filter((p) => p._id !== postId);
     renderList();
+    if (state.thread && state.thread._id === postId) closeThread();
+});
+socket.on('forum:reply-deleted', ({ postId, replyId }) => {
+    if (state.thread && state.thread._id === postId) {
+        const r = state.thread.replies.find((r) => r._id === replyId);
+        if (r) { r.deleted = true; r.body = '[deleted]'; }
+        renderThread();
+    }
+    const p = state.posts.find((p) => p._id === postId);
+    if (p) { p.replyCount = Math.max(0, (p.replyCount || 1) - 1); renderList(); }
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────
+async function init() {
+    try {
+        const me = await authedFetch('/api/auth/me');
+        currentUser = me.user;
+    } catch (err) {
+        console.error('Could not load session', err);
+        return; // authedFetch already redirected on 401/403
+    }
+
+    renderDropdown('sort');
+    renderDropdown('topic');
+    renderDropdown('display');
+    updateToggleLabels();
+    renderComposerTags();
+    await loadList();
     lucide.createIcons();
     $('splash').style.display = 'none';
+
     $('reply-input').addEventListener('input', autoGrow);
-    $('composer-body').addEventListener('input', () => {
-        $('composer-count').textContent = $('composer-body').value.length;
-    });
+    $('composer-body').addEventListener('input', () => { $('composer-count').textContent = $('composer-body').value.length; });
     $('reply-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitReply(); }
     });
     document.addEventListener('click', (e) => {
-        if (state.filterPanelOpen && !$('filter-panel').contains(e.target) && !$('filter-toggle-btn').contains(e.target)) {
-            closeFilterPanel();
+        if (state.openDropdown) {
+            const panel = $(`${state.openDropdown}-dropdown`);
+            const btn = $(`${state.openDropdown}-toggle-btn`);
+            if (panel && btn && !panel.contains(e.target) && !btn.contains(e.target)) closeDropdown();
         }
         if (state.reactPickerOpenFor && !e.target.closest('.react-picker') && !e.target.closest('.react-trigger')) {
             closeReactPicker();
         }
     });
 }
-function autoGrow(e) { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px'; }
+init();
 
-// ── composer tag chips (still chips — this picks one tag for a new post) ──
-function tagChip(id, label, color, active, onClick) {
-    const btn = document.createElement('button');
-    btn.className = 'tag-chip btn-press shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold' + (active ? ' active' : '');
-    if (active) btn.style.background = color;
-    const meta = TAGS.find((t) => t.id === id);
-    if (meta) {
-        const i = document.createElement('i');
-        i.setAttribute('data-lucide', meta.icon);
-        i.className = 'tag-icon';
-        i.style.color = active ? '#171717' : color;
-        btn.appendChild(i);
+// ── List loading (server-paginated, server-sorted/filtered) ───────────
+async function loadList() {
+    if (state.loadingList) return;
+    state.loadingList = true;
+    try {
+        const params = new URLSearchParams({ sort: state.sort });
+        if (state.filterTag !== 'all') params.set('tag', state.filterTag);
+        if (state.search.trim()) params.set('search', state.search.trim());
+        const data = await authedFetch('/api/forum/posts?' + params.toString());
+        state.posts = data.posts;
+        renderList();
+    } catch (err) {
+        renderListError(err.message || 'Could not load posts.');
+    } finally {
+        state.loadingList = false;
     }
-    const span = document.createElement('span');
-    span.textContent = label;
-    btn.appendChild(span);
-    btn.onclick = onClick;
-    return btn;
-}
-function tagMeta(id) { return TAGS.find((t) => t.id === id) || { name: id, color: '#A2A2A2', icon: 'hash' }; }
-
-// ── filter panel (sort / topic / display, all behind one icon button) ──
-function toggleFilterPanel() {
-    state.filterPanelOpen ? closeFilterPanel() : openFilterPanel();
-}
-function openFilterPanel() {
-    state.filterPanelOpen = true;
-    $('filter-panel').classList.remove('hidden');
-    $('filter-toggle-btn').classList.add('has-active');
-}
-function closeFilterPanel() {
-    state.filterPanelOpen = false;
-    $('filter-panel').classList.add('hidden');
-    $('filter-toggle-btn').classList.toggle('has-active', hasNonDefaultFilters());
-}
-function hasNonDefaultFilters() {
-    return state.filterTag !== 'all' || state.sort !== 'active' || state.display !== 'full';
 }
 
-function renderFilterPanel() {
-    // Sort options
-    const sortWrap = $('sort-options');
-    sortWrap.innerHTML = '';
-    SORTS.forEach((s) => {
-        sortWrap.appendChild(filterOption(s.icon, s.name, state.sort === s.id, () => {
-            state.sort = s.id; renderFilterPanel(); renderActiveFilterChips(); renderList();
-        }));
-    });
-
-    // Topic options
-    const topicWrap = $('topic-options');
-    topicWrap.innerHTML = '';
-    topicWrap.appendChild(filterOption('layers', 'All topics', state.filterTag === 'all', () => {
-        state.filterTag = 'all'; renderFilterPanel(); renderActiveFilterChips(); renderList();
-    }));
-    TAGS.forEach((t) => {
-        topicWrap.appendChild(filterOption(t.icon, t.name, state.filterTag === t.id, () => {
-            state.filterTag = t.id; renderFilterPanel(); renderActiveFilterChips(); renderList();
-        }));
-    });
-
-    // Display options
-    const dispWrap = $('display-options');
-    dispWrap.innerHTML = '';
-    DISPLAYS.forEach((d) => {
-        dispWrap.appendChild(filterOption(d.icon, d.name, state.display === d.id, () => {
-            state.display = d.id;
-            localStorage.setItem('aptiks_community_display_v1', d.id);
-            renderFilterPanel(); renderActiveFilterChips(); renderList();
-        }));
-    });
-
+function renderListError(message) {
+    const list = $('post-list');
+    list.innerHTML = '';
+    $('list-empty').classList.remove('hidden');
+    $('list-empty').innerHTML = `
+        <i data-lucide="wifi-off" class="w-6 h-6 text-text-muted mx-auto mb-3"></i>
+        <p class="text-sm text-text-secondary mb-1">${escapeHtml(message)}</p>
+        <p class="text-xs text-text-muted">Pull to refresh, or check your connection</p>`;
     lucide.createIcons();
 }
 
+// ── Dropdowns: Sort / Topic / Display, each its own button+panel ──────
+function toggleDropdown(which) {
+    if (state.openDropdown === which) return closeDropdown();
+    closeDropdown();
+    state.openDropdown = which;
+    $(`${which}-dropdown`).classList.remove('hidden');
+    $(`${which}-toggle-btn`).classList.add('is-open');
+}
+function closeDropdown() {
+    if (!state.openDropdown) return;
+    $(`${state.openDropdown}-dropdown`).classList.add('hidden');
+    $(`${state.openDropdown}-toggle-btn`).classList.remove('is-open');
+    state.openDropdown = null;
+}
+function renderDropdown(which) {
+    const wrap = $(`${which}-dropdown`);
+    wrap.innerHTML = '';
+    if (which === 'sort') {
+        SORTS.forEach((s) => wrap.appendChild(filterOption(s.icon, s.name, state.sort === s.id, () => {
+            state.sort = s.id; closeDropdown(); updateToggleLabels(); loadList();
+        })));
+    } else if (which === 'topic') {
+        wrap.appendChild(filterOption('layers', 'All topics', state.filterTag === 'all', () => {
+            state.filterTag = 'all'; closeDropdown(); updateToggleLabels(); loadList();
+        }));
+        TAGS.forEach((t) => wrap.appendChild(filterOption(t.icon, t.name, state.filterTag === t.id, () => {
+            state.filterTag = t.id; closeDropdown(); updateToggleLabels(); loadList();
+        })));
+    } else if (which === 'display') {
+        DISPLAYS.forEach((d) => wrap.appendChild(filterOption(d.icon, d.name, state.display === d.id, () => {
+            state.display = d.id;
+            localStorage.setItem('aptiks_forums_display_v1', d.id);
+            closeDropdown(); updateToggleLabels(); renderList();
+        })));
+    }
+    lucide.createIcons();
+}
 function filterOption(icon, label, active, onClick) {
     const btn = document.createElement('button');
-    btn.className = 'filter-option btn-press flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-left' + (active ? ' active' : '');
+    btn.className = 'filter-option btn-press flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-left w-full' + (active ? ' active' : '');
     btn.innerHTML = `<i data-lucide="${icon}" class="w-3.5 h-3.5 shrink-0"></i><span class="flex-1">${label}</span>`;
     if (active) {
         const check = document.createElement('i');
@@ -517,115 +570,130 @@ function filterOption(icon, label, active, onClick) {
     btn.onclick = onClick;
     return btn;
 }
+function updateToggleLabels() {
+    $('sort-toggle-label').textContent = (SORTS.find((s) => s.id === state.sort) || SORTS[0]).name;
+    $('topic-toggle-label').textContent = state.filterTag === 'all' ? 'All topics' : tagMeta(state.filterTag).name;
+    $('display-toggle-label').textContent = (DISPLAYS.find((d) => d.id === state.display) || DISPLAYS[0]).name;
+    $('sort-toggle-btn').classList.toggle('has-active', state.sort !== 'active');
+    $('topic-toggle-btn').classList.toggle('has-active', state.filterTag !== 'all');
+    $('display-toggle-btn').classList.toggle('has-active', state.display !== 'full');
+    renderDropdown('sort'); renderDropdown('topic'); renderDropdown('display');
+}
 
-// Small chips next to the Filters button, showing what's active (tap to clear)
-function renderActiveFilterChips() {
-    const wrap = $('active-filter-chips');
-    wrap.innerHTML = '';
-    if (state.filterTag !== 'all') {
-        const meta = tagMeta(state.filterTag);
-        wrap.appendChild(activeChip(meta.icon, meta.name, () => { state.filterTag = 'all'; renderFilterPanel(); renderActiveFilterChips(); renderList(); }));
-    }
-    if (state.sort !== 'active') {
-        const meta = SORTS.find((s) => s.id === state.sort);
-        wrap.appendChild(activeChip(meta.icon, meta.name, () => { state.sort = 'active'; renderFilterPanel(); renderActiveFilterChips(); renderList(); }));
-    }
-    if (state.display !== 'full') {
-        const meta = DISPLAYS.find((d) => d.id === state.display);
-        wrap.appendChild(activeChip(meta.icon, meta.name, () => { state.display = 'full'; localStorage.setItem('aptiks_community_display_v1', 'full'); renderFilterPanel(); renderActiveFilterChips(); renderList(); }));
-    }
-    $('filter-toggle-btn').classList.toggle('has-active', hasNonDefaultFilters());
+// ── Composer tag chips ──────────────────────────────────────────────
+function renderComposerTags() {
+    const row = $('composer-tags');
+    row.innerHTML = '';
+    TAGS.forEach((t) => row.appendChild(tagChip(t.id, t.name, t.color, state.composerTag === t.id, () => {
+        state.composerTag = t.id; renderComposerTags();
+    })));
     lucide.createIcons();
 }
-function activeChip(icon, label, onRemove) {
-    const chip = document.createElement('button');
-    chip.className = 'tag-chip btn-press shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-semibold';
-    chip.innerHTML = `<i data-lucide="${icon}" class="tag-icon"></i><span>${label}</span><i data-lucide="x" class="w-3 h-3"></i>`;
-    chip.onclick = onRemove;
-    return chip;
+function tagChip(id, label, color, active, onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'tag-chip btn-press shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold' + (active ? ' active' : '');
+    if (active) btn.style.background = color;
+    const meta = tagMeta(id);
+    const i = document.createElement('i');
+    i.setAttribute('data-lucide', meta.icon);
+    i.className = 'tag-icon';
+    i.style.color = active ? '#171717' : color;
+    const span = document.createElement('span');
+    span.textContent = label;
+    btn.append(i, span);
+    btn.onclick = onClick;
+    return btn;
 }
 
 function toggleSearch() {
     const row = $('search-row');
     row.classList.toggle('hidden');
     if (!row.classList.contains('hidden')) $('search-input').focus();
-    else { $('search-input').value = ''; state.search = ''; renderList(); }
+    else { state.search = ''; $('search-input').value = ''; loadList(); }
 }
+// debounce search so it doesn't refetch on every keystroke
+let searchTimer = null;
+$('search-input').oninput = () => {
+    state.search = $('search-input').value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadList, 300);
+};
 
-// ── list rendering ──────────────────────────────────────────────────
-function lastActivity(post) {
-    let t = post.createdAt;
-    post.replies.forEach((r) => { if (r.createdAt > t) t = r.createdAt; });
-    return t;
-}
-function reactionCount(item) {
-    return Object.values(item.reactions || {}).reduce((n, arr) => n + arr.length, 0);
-}
-function topScore(post) {
-    return reactionCount(post) + post.replies.length * 2;
-}
-
+// ── List rendering ────────────────────────────────────────────────────
 function renderList() {
-    state.search = ($('search-input').value || '').trim().toLowerCase();
-    let list = POSTS.filter((p) => state.filterTag === 'all' || p.tag === state.filterTag);
-    if (state.search) {
-        list = list.filter((p) => p.title.toLowerCase().includes(state.search) || p.body.toLowerCase().includes(state.search));
+    const list = $('post-list');
+    list.innerHTML = '';
+    if (!state.posts.length) {
+        $('list-empty').classList.remove('hidden');
+        $('list-empty').innerHTML = `
+            <i data-lucide="message-square-dashed" class="w-6 h-6 text-text-muted mx-auto mb-3"></i>
+            <p class="text-sm text-text-secondary mb-1">No posts here yet</p>
+            <p class="text-xs text-text-muted">Be the first to start a thread</p>`;
+        lucide.createIcons();
+        return;
     }
-    list = list.slice().sort((a, b) => {
-        if (!!b.pinned - !!a.pinned !== 0) return !!b.pinned - !!a.pinned;
-        if (state.sort === 'new') return b.createdAt - a.createdAt;
-        if (state.sort === 'top') return topScore(b) - topScore(a);
-        return lastActivity(b) - lastActivity(a);
-    });
-
-    const container = $('post-list');
-    container.innerHTML = '';
-    $('list-empty').classList.toggle('hidden', list.length > 0);
-    list.forEach((post) => container.appendChild(postCard(post)));
+    $('list-empty').classList.add('hidden');
+    state.posts.forEach((post) => list.appendChild(postCard(post)));
     lucide.createIcons();
 }
 
-function relTime(ts) {
-    const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-    if (s < 60) return 'just now';
-    const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
-    const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
-    const d = Math.floor(h / 24); if (d < 30) return d + 'd ago';
-    const mo = Math.floor(d / 30); if (mo < 12) return mo + 'mo ago';
-    return Math.floor(mo / 12) + 'y ago';
+function relTime(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+    if (m < 1) return 'now';
+    if (m < 60) return `${m}m`;
+    if (h < 24) return `${h}h`;
+    if (d < 7) return `${d}d`;
+    return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function avatarEl(name, size) {
+function avatarEl(user, size) {
     const el = document.createElement('div');
-    el.className = `avatar rounded-full overflow-hidden flex items-center justify-center font-bold flex-shrink-0`;
-    el.style.width = size + 'px'; el.style.height = size + 'px';
-    el.style.fontSize = Math.max(10, size * 0.42) + 'px';
-    el.textContent = (name || '?').charAt(0).toUpperCase();
+    el.className = `avatar rounded-full flex items-center justify-center shrink-0 font-bold overflow-hidden${user.avatarUrl ? ' has-photo' : ''}`;
+    el.style.width = size + 'px'; el.style.height = size + 'px'; el.style.fontSize = Math.max(9, size * 0.42) + 'px';
+    if (user.avatarUrl) {
+        const img = document.createElement('img'); img.src = user.avatarUrl; img.alt = '';
+        el.appendChild(img);
+    } else {
+        el.textContent = ((user.displayName || user.username || '?')[0] || '?').toUpperCase();
+    }
     return el;
 }
 
+function badgeEl(user) {
+    if (!user.badge) return null;
+    const span = document.createElement('span');
+    span.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0';
+    if (user.badge === 'admin') { span.textContent = 'ADMIN'; span.style.background = 'rgba(248,113,113,.15)'; span.style.color = '#F87171'; }
+    else { span.textContent = 'MOD'; span.style.background = 'rgba(96,165,250,.15)'; span.style.color = '#60A5FA'; }
+    return span;
+}
+
+function reactionCount(item) {
+    if (!item.reactions) return 0;
+    return Object.values(item.reactions).reduce((sum, arr) => sum + arr.length, 0);
+}
+function myKey() { return currentUser && currentUser._id; }
+
 function postCard(post) {
     const meta = tagMeta(post.tag);
-    const visited = getViewed().includes(post.id);
+    const visited = viewedThisSession.has(post._id);
     const card = document.createElement('div');
     card.className = 'post-card rounded-2xl fade-in cursor-pointer' + (visited ? ' visited' : '') +
         (state.display === 'title' ? ' p-3' : ' p-4');
-    card.onclick = () => openThread(post.id);
+    card.onclick = () => openThread(post._id);
 
-    // ── top row: tag icon + label, pin/lock, timestamp ──
     const top = document.createElement('div');
     top.className = 'flex items-center justify-between gap-2' + (state.display === 'title' ? '' : ' mb-2');
     const chipWrap = document.createElement('div');
     chipWrap.className = 'flex items-center gap-1.5 min-w-0';
     const icon = document.createElement('i');
     icon.setAttribute('data-lucide', meta.icon);
-    icon.className = 'tag-icon';
-    icon.style.color = meta.color;
+    icon.className = 'tag-icon post-topic-icon';
     chipWrap.appendChild(icon);
     if (state.display !== 'title') {
         const chipLabel = document.createElement('span');
-        chipLabel.className = 'text-[11px] font-semibold truncate';
-        chipLabel.style.color = meta.color;
+        chipLabel.className = 'text-[11px] font-semibold truncate post-topic-label';
         chipLabel.textContent = meta.name;
         chipWrap.appendChild(chipLabel);
     }
@@ -633,7 +701,6 @@ function postCard(post) {
     if (post.locked) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'lock'); i.className = 'w-3 h-3 text-text-muted shrink-0'; chipWrap.appendChild(i); }
 
     if (state.display === 'title') {
-        // Title-only: icon + title inline on one row, time on the right
         const title = document.createElement('div');
         title.className = 'post-title font-bold text-sm truncate flex-1 min-w-0 ml-1.5';
         title.textContent = post.title;
@@ -643,18 +710,18 @@ function postCard(post) {
     top.appendChild(chipWrap);
     const time = document.createElement('span');
     time.className = 'text-[11px] text-text-muted shrink-0';
-    time.textContent = relTime(lastActivity(post));
+    time.textContent = relTime(post.lastActivityAt || post.createdAt);
     top.appendChild(time);
     card.appendChild(top);
 
-    if (state.display === 'title') return card; // nothing else renders in title-only mode
+    if (state.display === 'title') return card;
 
     const title = document.createElement('div');
     title.className = 'post-title font-bold text-sm mb-1 truncate';
     title.textContent = post.title;
     card.appendChild(title);
 
-    if (state.display === 'full') {
+    if (state.display === 'full' && post.body) {
         const body = document.createElement('div');
         body.className = 'text-xs text-text-secondary mb-3 overflow-hidden';
         body.style.display = '-webkit-box'; body.style.webkitLineClamp = '2'; body.style.webkitBoxOrient = 'vertical';
@@ -662,59 +729,66 @@ function postCard(post) {
         card.appendChild(body);
     }
 
-    // ── bottom row: author (left) — stats, reaction trigger (right) ──
     const bottom = document.createElement('div');
     bottom.className = 'flex items-center justify-between gap-2' + (state.display === 'compact' ? ' mt-1' : '');
     const authorWrap = document.createElement('div');
     authorWrap.className = 'flex items-center gap-2 min-w-0';
-    authorWrap.appendChild(avatarEl(post.authorName, state.display === 'compact' ? 18 : 20));
+    authorWrap.appendChild(avatarEl(post.author, state.display === 'compact' ? 18 : 20));
     const authorName = document.createElement('span');
     authorName.className = 'text-[11px] text-text-secondary truncate';
-    authorName.textContent = post.authorName;
+    authorName.textContent = post.author.displayName;
     authorWrap.appendChild(authorName);
+    const badge = badgeEl(post.author);
+    if (badge) authorWrap.appendChild(badge);
     bottom.appendChild(authorWrap);
 
     const stats = document.createElement('div');
     stats.className = 'flex items-center gap-3 text-text-muted text-[11px] shrink-0';
     const totalReax = reactionCount(post);
     stats.innerHTML = `
-        <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i>${post.replies.length}</span>
-        <span class="flex items-center gap-1"><i data-lucide="eye" class="w-3 h-3"></i>${post.views}</span>
-    `;
-    if (totalReax > 0) {
-        stats.innerHTML += `<span class="flex items-center gap-1"><i data-lucide="smile" class="w-3 h-3"></i>${totalReax}</span>`;
-    }
+        <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i>${post.replyCount}</span>
+        <span class="flex items-center gap-1"><i data-lucide="eye" class="w-3 h-3"></i>${post.views}</span>`;
+    if (totalReax > 0) stats.innerHTML += `<span class="flex items-center gap-1"><i data-lucide="smile" class="w-3 h-3"></i>${totalReax}</span>`;
     bottom.appendChild(stats);
 
-    // Single reaction icon — opens a small emoji picker right where it sits
     const reactBtn = document.createElement('button');
     const mineOnCard = REACTIONS.some((e) => ((post.reactions && post.reactions[e]) || []).includes(myKey()));
     reactBtn.className = 'react-trigger btn-press shrink-0 w-7 h-7 rounded-full flex items-center justify-center' + (mineOnCard ? ' mine' : '');
     reactBtn.setAttribute('aria-label', 'React');
     reactBtn.innerHTML = '<i data-lucide="smile-plus" class="w-3.5 h-3.5"></i>';
-    reactBtn.onclick = (e) => { e.stopPropagation(); openReactPickerFor(post.id, 'post', post.id, reactBtn); };
+    reactBtn.onclick = (e) => { e.stopPropagation(); openReactPickerFor(post._id, null, reactBtn); };
     bottom.appendChild(reactBtn);
 
     card.appendChild(bottom);
-
     return card;
 }
 
-// ── thread view ──────────────────────────────────────────────────────
-function openThread(id) {
+// ── Thread view ───────────────────────────────────────────────────────
+async function openThread(id) {
     state.currentPostId = id;
-    const post = POSTS.find((p) => p.id === id);
-    if (!post) return;
-    if (markViewed(id)) { post.views += 1; savePosts(POSTS); }
-
     $('view-list').classList.add('hidden');
     $('view-thread').classList.remove('hidden');
     $('bottom-nav').classList.add('hidden');
-    renderThread();
-    $('thread-scroller').scrollTop = 0;
+    $('thread-op').innerHTML = '<div class="text-xs text-text-muted py-8 text-center">Loading…</div>';
+    $('thread-replies').innerHTML = '';
+    $('thread-reply-count').textContent = '';
+    lucide.createIcons();
+
+    try {
+        const data = await authedFetch('/api/forum/posts/' + id);
+        state.thread = data.post;
+        viewedThisSession.add(id);
+        const cached = state.posts.find((p) => p._id === id);
+        if (cached) cached.views = state.thread.views;
+        renderThread();
+        $('thread-scroller').scrollTop = 0;
+    } catch (err) {
+        $('thread-op').innerHTML = `<div class="text-xs text-red-400 py-8 text-center">${escapeHtml(err.message || 'Could not load this post.')}</div>`;
+    }
 }
 function closeThread() {
     state.currentPostId = null;
+    state.thread = null;
     $('view-thread').classList.add('hidden');
     $('view-list').classList.remove('hidden');
     $('bottom-nav').classList.remove('hidden');
@@ -722,93 +796,114 @@ function closeThread() {
 }
 
 function renderThread() {
-    const post = POSTS.find((p) => p.id === state.currentPostId);
+    const post = state.thread;
     if (!post) return closeThread();
     const meta = tagMeta(post.tag);
+    const staff = isStaffRole(currentUser.role);
 
     $('thread-head-title').textContent = post.title;
+    $('thread-pin-btn').classList.toggle('hidden', !staff);
+    $('thread-lock-btn').classList.toggle('hidden', !staff);
+    $('thread-pin-btn').classList.toggle('text-accent', post.pinned);
+    $('thread-lock-btn').classList.toggle('text-accent', post.locked);
 
-    const staff = isStaff();
-    const pinBtn = $('thread-pin-btn'), lockBtn = $('thread-lock-btn');
-    pinBtn.classList.toggle('hidden', !staff);
-    lockBtn.classList.toggle('hidden', !staff);
-    pinBtn.classList.toggle('text-accent', !!post.pinned);
-    lockBtn.classList.toggle('text-accent', !!post.locked);
-
-    // Original post
     const op = $('thread-op');
     op.innerHTML = '';
-    const opCard = document.createElement('div');
-    opCard.className = 'post-card rounded-2xl p-4';
-
     const chipRow = document.createElement('div');
     chipRow.className = 'flex items-center gap-1.5 mb-3';
-    const icon = document.createElement('i'); icon.setAttribute('data-lucide', meta.icon); icon.className = 'tag-icon'; icon.style.color = meta.color;
+    const icon = document.createElement('i'); icon.setAttribute('data-lucide', meta.icon); icon.className = 'tag-icon post-topic-icon';
     const chipLabel = document.createElement('span');
-    chipLabel.className = 'text-[11px] font-semibold'; chipLabel.style.color = meta.color; chipLabel.textContent = meta.name;
+    chipLabel.className = 'text-[11px] font-semibold post-topic-label'; chipLabel.textContent = meta.name;
     chipRow.append(icon, chipLabel);
     if (post.pinned) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'pin'); i.className = 'w-3 h-3 text-accent'; chipRow.appendChild(i); }
     if (post.locked) { const i = document.createElement('i'); i.setAttribute('data-lucide', 'lock'); i.className = 'w-3 h-3 text-text-muted'; chipRow.appendChild(i); }
-    opCard.appendChild(chipRow);
+    op.appendChild(chipRow);
 
-    const title = document.createElement('div');
-    title.className = 'text-xl font-bold tracking-tight mb-3'; title.textContent = post.title;
-    opCard.appendChild(title);
-
-    const body = document.createElement('p');
-    body.className = 'text-sm text-text-secondary whitespace-pre-wrap mb-4'; body.textContent = post.body;
-    opCard.appendChild(body);
+    const title = document.createElement('h1');
+    title.className = 'text-lg font-bold mb-3'; title.textContent = post.title;
+    op.appendChild(title);
 
     const authorRow = document.createElement('div');
     authorRow.className = 'flex items-center gap-2 mb-4';
-    authorRow.appendChild(avatarEl(post.authorName, 26));
-    const authorInfo = document.createElement('div');
-    authorInfo.innerHTML = `<div class="text-xs font-semibold">${escapeHtml(post.authorName)}</div><div class="text-[11px] text-text-muted">${relTime(post.createdAt)}</div>`;
-    authorRow.appendChild(authorInfo);
-    opCard.appendChild(authorRow);
+    authorRow.appendChild(avatarEl(post.author, 28));
+    const nameWrap = document.createElement('div');
+    nameWrap.innerHTML = `<div class="text-sm font-semibold flex items-center gap-1.5"></div><div class="text-[11px] text-text-muted">${relTime(post.createdAt)}</div>`;
+    const nameLine = nameWrap.firstElementChild;
+    nameLine.append(document.createTextNode(post.author.displayName));
+    const badge = badgeEl(post.author);
+    if (badge) nameLine.appendChild(badge);
+    authorRow.appendChild(nameWrap);
+    op.appendChild(authorRow);
 
-    opCard.appendChild(reactionRow(post, 'post', post.id));
-    op.appendChild(opCard);
+    const body = document.createElement('p');
+    body.className = 'text-sm text-text-secondary whitespace-pre-wrap mb-4'; body.textContent = post.body;
+    op.appendChild(body);
 
-    $('thread-reply-count').textContent = post.replies.length + (post.replies.length === 1 ? ' reply' : ' replies');
+    op.appendChild(reactionRow(post, null));
 
-    // Replies
-    const repliesEl = $('thread-replies');
-    repliesEl.innerHTML = '';
-    post.replies.forEach((r) => repliesEl.appendChild(replyBubble(post, r)));
+    const canModify = staff || (myKey() && String(post.author._id) === String(myKey()));
+    if (canModify) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'mt-3 text-[11px] text-red-400/80 hover:text-red-400 flex items-center gap-1';
+        delBtn.innerHTML = '<i data-lucide="trash-2" class="w-3 h-3"></i><span>Delete post</span>';
+        delBtn.onclick = () => confirmDeletePost(post._id);
+        op.appendChild(delBtn);
+    }
 
-    // Reply form vs locked
-    const locked = post.locked && !staff;
-    $('thread-reply-form').classList.toggle('hidden', locked);
-    $('thread-locked-msg').classList.toggle('hidden', !locked);
+    const visibleReplies = post.replies;
+    $('thread-reply-count').textContent = `${visibleReplies.filter((r) => !r.deleted).length} ${visibleReplies.filter((r) => !r.deleted).length === 1 ? 'reply' : 'replies'}`;
+
+    const repliesWrap = $('thread-replies');
+    repliesWrap.innerHTML = '';
+    visibleReplies.forEach((reply) => repliesWrap.appendChild(replyBubble(post, reply)));
+
+    $('thread-reply-form').classList.toggle('hidden', post.locked && !staff);
+    $('thread-locked-msg').classList.toggle('hidden', !(post.locked && !staff));
 
     lucide.createIcons();
 }
 
 function replyBubble(post, reply) {
     const wrap = document.createElement('div');
-    wrap.className = 'reply-bubble rounded-2xl p-3.5 fade-in';
-    const head = document.createElement('div');
-    head.className = 'flex items-center gap-2 mb-2';
-    head.appendChild(avatarEl(reply.authorName, 20));
-    const info = document.createElement('div');
-    info.innerHTML = `<span class="text-xs font-semibold">${escapeHtml(reply.authorName)}</span> <span class="text-[11px] text-text-muted">${relTime(reply.createdAt)}</span>`;
-    head.appendChild(info);
-    wrap.appendChild(head);
+    wrap.className = 'reply-bubble rounded-xl p-3.5 fade-in';
+    const top = document.createElement('div');
+    top.className = 'flex items-center gap-2 mb-2';
+    top.appendChild(avatarEl(reply.author, 22));
+    const nameLine = document.createElement('div');
+    nameLine.className = 'text-xs font-semibold flex items-center gap-1.5 flex-1 min-w-0';
+    nameLine.append(document.createTextNode(reply.author.displayName));
+    const badge = badgeEl(reply.author);
+    if (badge) nameLine.appendChild(badge);
+    top.appendChild(nameLine);
+    const time = document.createElement('span'); time.className = 'text-[11px] text-text-muted shrink-0'; time.textContent = relTime(reply.createdAt);
+    top.appendChild(time);
+    wrap.appendChild(top);
+
     const body = document.createElement('p');
-    body.className = 'text-sm text-text-primary whitespace-pre-wrap mb-2'; body.textContent = reply.body;
+    body.className = 'text-sm whitespace-pre-wrap mb-2' + (reply.deleted ? ' text-text-muted italic' : ' text-text-primary');
+    body.textContent = reply.body;
     wrap.appendChild(body);
-    wrap.appendChild(reactionRow(post, 'reply', reply.id));
+
+    if (!reply.deleted) {
+        wrap.appendChild(reactionRow(post, reply));
+        const canModify = isStaffRole(currentUser.role) || (myKey() && String(reply.author._id) === String(myKey()));
+        if (canModify) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'mt-2 text-[11px] text-red-400/80 hover:text-red-400 flex items-center gap-1';
+            delBtn.innerHTML = '<i data-lucide="trash-2" class="w-3 h-3"></i><span>Delete</span>';
+            delBtn.onclick = () => confirmDeleteReply(post._id, reply._id);
+            wrap.appendChild(delBtn);
+        }
+    }
     return wrap;
 }
 
-// Thread view: existing reactions shown exactly where they were (as badges
-// with counts), plus one trigger icon on the right that opens the picker.
-function reactionRow(post, kind, itemId) {
-    const item = kind === 'post' ? post : post.replies.find((r) => r.id === itemId);
+// Reactions shown exactly where they already sit (badges with counts) plus
+// one trigger icon on the right that opens the picker.
+function reactionRow(post, reply) {
+    const item = reply || post;
     const row = document.createElement('div');
     row.className = 'flex items-center gap-1.5 flex-wrap';
-
     REACTIONS.forEach((emoji) => {
         const users = (item.reactions && item.reactions[emoji]) || [];
         if (!users.length) return;
@@ -816,43 +911,32 @@ function reactionRow(post, kind, itemId) {
         const badge = document.createElement('button');
         badge.className = 'reax-badge btn-press flex items-center gap-1 rounded-full px-2.5 py-1 text-xs' + (mine ? ' mine' : '');
         badge.innerHTML = `<span>${emoji}</span><span>${users.length}</span>`;
-        badge.onclick = (e) => { e.stopPropagation(); toggleReaction(kind, itemId, emoji); renderThread(); };
+        badge.onclick = (e) => { e.stopPropagation(); react(post._id, reply ? reply._id : null, emoji); };
         row.appendChild(badge);
     });
-
     const trigger = document.createElement('button');
     const mineAny = REACTIONS.some((e) => ((item.reactions && item.reactions[e]) || []).includes(myKey()));
     trigger.className = 'react-trigger btn-press w-7 h-7 rounded-full flex items-center justify-center' + (mineAny ? ' mine' : '');
     trigger.setAttribute('aria-label', 'React');
     trigger.innerHTML = '<i data-lucide="smile-plus" class="w-3.5 h-3.5"></i>';
-    trigger.onclick = (e) => { e.stopPropagation(); openReactPickerFor(post.id, kind, itemId, trigger); };
+    trigger.onclick = (e) => { e.stopPropagation(); openReactPickerFor(post._id, reply ? reply._id : null, trigger); };
     row.appendChild(trigger);
-
-    lucide.createIcons();
     return row;
 }
 
-// ── floating emoji picker, anchored to whichever trigger was clicked ──
-function openReactPickerFor(postId, kind, itemId, anchorEl) {
+function openReactPickerFor(postId, replyId, anchorEl) {
     closeReactPicker();
-    state.reactPickerOpenFor = itemId;
-
+    state.reactPickerOpenFor = replyId || postId;
     const picker = document.createElement('div');
     picker.className = 'react-picker fixed z-[150] flex items-center gap-1 rounded-full px-2 py-1.5';
     REACTIONS.forEach((emoji) => {
         const btn = document.createElement('button');
         btn.className = 'text-lg px-1';
         btn.textContent = emoji;
-        btn.onclick = (e) => {
-            e.stopPropagation();
-            toggleReaction(kind, itemId, emoji);
-            closeReactPicker();
-            if (!$('view-thread').classList.contains('hidden')) renderThread(); else renderList();
-        };
+        btn.onclick = (e) => { e.stopPropagation(); react(postId, replyId, emoji); closeReactPicker(); };
         picker.appendChild(btn);
     });
     document.body.appendChild(picker);
-
     const r = anchorEl.getBoundingClientRect();
     picker.style.top = (r.top - 44) + 'px';
     let left = r.left + r.width / 2 - picker.offsetWidth / 2;
@@ -863,118 +947,117 @@ function closeReactPicker() {
     document.querySelectorAll('.react-picker').forEach((el) => el.remove());
 }
 
-function toggleReaction(kind, itemId, emoji) {
-    const post = POSTS.find((p) => p.id === state.currentPostId);
-    if (!post) return;
-    const item = kind === 'post' ? post : post.replies.find((r) => r.id === itemId);
-    if (!item) return;
-    item.reactions = item.reactions || {};
-    const arr = item.reactions[emoji] = item.reactions[emoji] || [];
-    const me = myKey();
-    const idx = arr.indexOf(me);
-    if (idx >= 0) arr.splice(idx, 1); else arr.push(me);
-    savePosts(POSTS);
-    renderThread();
+async function react(postId, replyId, emoji) {
+    // Optimistic: the server echoes the change back over the socket to
+    // every tab (including this one), so no local mutation here — this
+    // just fires the request and lets the socket event update state.
+    try {
+        await authedFetch(`/api/forum/posts/${postId}/react`, {
+            method: 'POST',
+            body: JSON.stringify({ emoji, replyId: replyId || undefined }),
+        });
+    } catch (err) {
+        console.error('Reaction failed', err);
+    }
 }
 
-function togglePin() {
-    if (!isStaff()) return;
-    const post = POSTS.find((p) => p.id === state.currentPostId);
-    if (!post) return;
-    post.pinned = !post.pinned;
-    savePosts(POSTS);
-    renderThread();
-}
-function toggleLock() {
-    if (!isStaff()) return;
-    const post = POSTS.find((p) => p.id === state.currentPostId);
-    if (!post) return;
-    post.locked = !post.locked;
-    savePosts(POSTS);
-    renderThread();
-}
-
-function submitReply() {
-    const post = POSTS.find((p) => p.id === state.currentPostId);
-    if (!post) return;
-    if (post.locked && !isStaff()) return;
-    const input = $('reply-input');
-    const body = input.value.trim();
-    if (!body) return;
-    const u = currentUser();
-    post.replies.push({
-        id: 'r' + Date.now(),
-        body,
-        authorId: myKey(),
-        authorName: (u && (u.displayName || u.username)) || 'You',
-        authorAvatar: (u && u.avatarUrl) || null,
-        createdAt: Date.now(),
-        reactions: {},
-    });
-    savePosts(POSTS);
-    input.value = ''; input.style.height = 'auto';
-    renderThread();
-    $('thread-scroller').scrollTop = $('thread-scroller').scrollHeight;
-}
-
-// ── composer ─────────────────────────────────────────────────────────
-function renderComposerTags() {
-    const row = $('composer-tags');
-    row.innerHTML = '';
-    TAGS.forEach((t) => {
-        row.appendChild(tagChip(t.id, t.name, t.color, state.composerTag === t.id, () => { state.composerTag = t.id; renderComposerTags(); }));
-    });
-}
+// ── Composer ──────────────────────────────────────────────────────────
 function openComposer() {
+    $('composer-sheet').classList.remove('hidden');
     $('composer-title').value = '';
     $('composer-body').value = '';
     $('composer-count').textContent = '0';
     $('composer-err').classList.add('hidden');
     state.composerTag = TAGS[0].id;
     renderComposerTags();
-    $('composer-sheet').classList.remove('hidden');
-    lucide.createIcons();
-    setTimeout(() => $('composer-title').focus(), 50);
 }
 function closeComposer() { $('composer-sheet').classList.add('hidden'); }
 
-function submitPost() {
+async function submitPost() {
     const title = $('composer-title').value.trim();
     const body = $('composer-body').value.trim();
     const err = $('composer-err');
     if (!title || !body) {
-        err.textContent = 'Add a title and a message before posting.';
+        err.textContent = 'Please fill in a title and message.';
         err.classList.remove('hidden');
         return;
     }
-    const u = currentUser();
-    const post = {
-        id: 'p' + Date.now(),
-        tag: state.composerTag,
-        title, body,
-        authorId: myKey(),
-        authorName: (u && (u.displayName || u.username)) || 'You',
-        authorAvatar: (u && u.avatarUrl) || null,
-        createdAt: Date.now(),
-        pinned: false, locked: false, views: 0,
-        reactions: {}, replies: [],
-    };
-    POSTS.unshift(post);
-    savePosts(POSTS);
-    closeComposer();
-    state.filterTag = 'all';
-    renderFilterPanel();
-    renderActiveFilterChips();
-    renderList();
-    openThread(post.id);
+    const btn = $('composer-submit');
+    btn.disabled = true; btn.textContent = 'Posting…';
+    try {
+        const data = await authedFetch('/api/forum/posts', {
+            method: 'POST',
+            body: JSON.stringify({ title, body, tag: state.composerTag }),
+        });
+        closeComposer();
+        state.filterTag = 'all';
+        updateToggleLabels();
+        await loadList();
+        openThread(data.post._id);
+    } catch (e) {
+        err.textContent = e.message || 'Could not post. Please try again.';
+        err.classList.remove('hidden');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Post';
+    }
 }
 
-function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function autoGrow() {
+    const el = $('reply-input');
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px';
 }
 
-document.addEventListener('DOMContentLoaded', init);
+async function submitReply() {
+    const input = $('reply-input');
+    const body = input.value.trim();
+    if (!body || !state.thread) return;
+    input.value = ''; autoGrow();
+    try {
+        await authedFetch(`/api/forum/posts/${state.thread._id}/replies`, {
+            method: 'POST',
+            body: JSON.stringify({ body }),
+        });
+        // The server's socket emit appends it via forum:reply-created,
+        // for this tab and any other tab/device open on the same thread.
+        $('thread-scroller').scrollTop = $('thread-scroller').scrollHeight;
+    } catch (e) {
+        input.value = body; autoGrow();
+        alert(e.message || 'Could not send reply.');
+    }
+}
 
+// ── Staff moderation actions ─────────────────────────────────────────
+async function togglePin() {
+    if (!state.thread) return;
+    try {
+        await authedFetch(`/api/forum/posts/${state.thread._id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ pinned: !state.thread.pinned }),
+        });
+    } catch (e) { alert(e.message || 'Could not update pin.'); }
+}
+async function toggleLock() {
+    if (!state.thread) return;
+    try {
+        await authedFetch(`/api/forum/posts/${state.thread._id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ locked: !state.thread.locked }),
+        });
+    } catch (e) { alert(e.message || 'Could not update lock.'); }
+}
+async function confirmDeletePost(postId) {
+    if (!confirm('Delete this post? This cannot be undone.')) return;
+    try {
+        await authedFetch(`/api/forum/posts/${postId}`, { method: 'DELETE' });
+    } catch (e) { alert(e.message || 'Could not delete post.'); }
+}
+async function confirmDeleteReply(postId, replyId) {
+    if (!confirm('Delete this reply?')) return;
+    try {
+        await authedFetch(`/api/forum/posts/${postId}/replies/${replyId}`, { method: 'DELETE' });
+    } catch (e) { alert(e.message || 'Could not delete reply.'); }
+}
 </script>
 </body>
 </html>
