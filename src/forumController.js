@@ -20,10 +20,14 @@ const authorSummary = (u) => ({
   badge: badgeFor(u.role),
 });
 
+// reactions can arrive as a real Mongoose Map (fresh document, .toObject()
+// with no flattenMaps) or as a plain object (after .lean(), or when
+// flattenMaps converts it) — handle both instead of assuming one shape.
 const reactionsToObject = (m) => {
   const out = {};
   if (!m) return out;
-  for (const [emoji, ids] of m.entries()) {
+  const pairs = m instanceof Map ? m.entries() : Object.entries(m);
+  for (const [emoji, ids] of pairs) {
     if (ids && ids.length) out[emoji] = ids.map(String);
   }
   return out;
