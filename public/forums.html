@@ -69,8 +69,10 @@
     .seg-btn { color: #747474; transition: all .15s; }
     .seg-btn.active { color: #FFFFFF; background: #292929; }
 
-    /* Filter trigger button */
-    .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; white-space: nowrap; }
+    /* Filter trigger button: fixed width regardless of label content —
+       the label truncates with an ellipsis instead of resizing the pill. */
+    .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; width: 152px; }
+    .filter-btn-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; text-align: left; }
     .filter-btn.has-active { border-color: #E2B714; color: #E2B714; }
     .filter-btn.is-open { border-color: #4A4A4A; color: #FFFFFF; }
 
@@ -162,38 +164,39 @@
             </div>
         </div>
 
-        <!-- Filter bar: three independent dropdown buttons (Sort / Topic / Display) -->
+        <!-- Filter bar: three independent dropdown buttons (Sort / Topic / Display).
+             Buttons are fixed-width pills in a horizontally scrollable row;
+             each dropdown itself is rendered fixed-position (see
+             openFilterDropdown in the script) so it floats above the page
+             instead of being clipped by this row's own scroll container. -->
         <div class="flex-shrink-0 px-5 pt-3 pb-3 flex items-center gap-2 overflow-x-auto" style="scrollbar-width:none">
-            <div class="relative shrink-0">
-                <button id="sort-toggle-btn" onclick="toggleDropdown('sort')" aria-label="Sort"
-                    class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
-                    <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 shrink-0"></i>
-                    <span id="sort-toggle-label">Recent activity</span>
-                    <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
-                </button>
-                <div id="sort-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
-            </div>
+            <button id="sort-toggle-btn" onclick="toggleDropdown('sort')" aria-label="Sort"
+                class="filter-btn btn-press shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 shrink-0"></i>
+                <span id="sort-toggle-label" class="filter-btn-label">Recent activity</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
+            </button>
 
-            <div class="relative shrink-0">
-                <button id="topic-toggle-btn" onclick="toggleDropdown('topic')" aria-label="Topic"
-                    class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
-                    <i data-lucide="layers" class="w-3.5 h-3.5 shrink-0"></i>
-                    <span id="topic-toggle-label">All topics</span>
-                    <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
-                </button>
-                <div id="topic-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
-            </div>
+            <button id="topic-toggle-btn" onclick="toggleDropdown('topic')" aria-label="Topic"
+                class="filter-btn btn-press shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                <i data-lucide="layers" class="w-3.5 h-3.5 shrink-0"></i>
+                <span id="topic-toggle-label" class="filter-btn-label">All topics</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
+            </button>
 
-            <div class="relative shrink-0">
-                <button id="display-toggle-btn" onclick="toggleDropdown('display')" aria-label="Display"
-                    class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
-                    <i data-lucide="rows-3" class="w-3.5 h-3.5 shrink-0"></i>
-                    <span id="display-toggle-label">Full</span>
-                    <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
-                </button>
-                <div id="display-dropdown" class="filter-panel hidden absolute right-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
-            </div>
+            <button id="display-toggle-btn" onclick="toggleDropdown('display')" aria-label="Display"
+                class="filter-btn btn-press shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                <i data-lucide="rows-3" class="w-3.5 h-3.5 shrink-0"></i>
+                <span id="display-toggle-label" class="filter-btn-label">Full</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
+            </button>
         </div>
+        <!-- Dropdown panels live outside the scrolling filter row, positioned
+             fixed via JS so no ancestor's overflow/scroll clipping can hide
+             or squash them. -->
+        <div id="sort-dropdown" class="filter-panel hidden fixed z-[140] rounded-xl p-1.5 min-w-[180px]"></div>
+        <div id="topic-dropdown" class="filter-panel hidden fixed z-[140] rounded-xl p-1.5 min-w-[180px]"></div>
+        <div id="display-dropdown" class="filter-panel hidden fixed z-[140] rounded-xl p-1.5 min-w-[180px]"></div>
 
         <main class="flex-1 overflow-y-auto" style="overscroll-behavior: contain">
             <div class="max-w-[520px] w-full mx-auto px-5 pb-6">
@@ -507,6 +510,11 @@ async function init() {
             $('thread-menu').classList.add('hidden');
         }
     });
+    // Floating panels are position:fixed and computed once on open; rather
+    // than re-tracking their anchor through every scroll/resize, just close
+    // them — standard behavior for floating menus.
+    window.addEventListener('scroll', () => { closeDropdown(); closeReactPicker(); closeOptionsMenu(); }, true);
+    window.addEventListener('resize', () => { closeDropdown(); closeReactPicker(); closeOptionsMenu(); });
 }
 init();
 
@@ -544,6 +552,7 @@ function toggleDropdown(which) {
     if (state.openDropdown === which) return closeDropdown();
     closeDropdown();
     state.openDropdown = which;
+    positionDropdown(which);
     $(`${which}-dropdown`).classList.remove('hidden');
     $(`${which}-toggle-btn`).classList.add('is-open');
 }
@@ -552,6 +561,19 @@ function closeDropdown() {
     $(`${state.openDropdown}-dropdown`).classList.add('hidden');
     $(`${state.openDropdown}-toggle-btn`).classList.remove('is-open');
     state.openDropdown = null;
+}
+// Fixed-position panel anchored under its button via getBoundingClientRect,
+// so it floats above the page instead of being clipped by the filter row's
+// own horizontal-scroll container.
+function positionDropdown(which) {
+    const btn = $(`${which}-toggle-btn`);
+    const panel = $(`${which}-dropdown`);
+    const r = btn.getBoundingClientRect();
+    panel.style.top = (r.bottom + 6) + 'px';
+    let left = r.left;
+    const width = panel.offsetWidth || 180;
+    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+    panel.style.left = left + 'px';
 }
 function renderDropdown(which) {
     const wrap = $(`${which}-dropdown`);
@@ -640,7 +662,7 @@ function postMenuItems(post) {
         items.push({ icon: 'lock', label: post.locked ? 'Unlock post' : 'Lock post', active: post.locked, onClick: () => setPostFlags(post._id, { locked: !post.locked }) });
     }
     if (staff || isOwner) {
-        items.push({ icon: 'trash-2', label: 'Delete post', danger: true, onClick: () => confirmDeletePost(post._id) });
+        items.push({ icon: 'trash-2', label: 'Delete post', danger: true, onClick: () => deletePost(post._id) });
     }
     return items;
 }
@@ -782,15 +804,19 @@ function postCard(post) {
         chipWrap.classList.add('flex-1');
     }
     top.appendChild(chipWrap);
+
+    const trailing = document.createElement('div');
+    trailing.className = 'flex items-center gap-1 shrink-0';
     const time = document.createElement('span');
     time.className = 'text-[11px] text-text-muted shrink-0';
     time.textContent = relTime(post.lastActivityAt || post.createdAt);
-    top.appendChild(time);
+    trailing.appendChild(time);
 
     const canModifyCard = isStaffRole(currentUser.role) || (myKey() && String(post.author._id) === String(myKey()));
     if (canModifyCard && state.display !== 'title') {
-        top.appendChild(optionsMenuBtn('post-' + post._id, postMenuItems(post), 'w-6 h-6'));
+        trailing.appendChild(optionsMenuBtn('post-' + post._id, postMenuItems(post), 'w-7 h-7'));
     }
+    top.appendChild(trailing);
     card.appendChild(top);
 
     if (state.display === 'title') return card;
@@ -966,7 +992,7 @@ function replyBubble(post, reply) {
     const canModify = isStaffRole(currentUser.role) || (myKey() && String(reply.author._id) === String(myKey()));
     if (!reply.deleted && canModify) {
         top.appendChild(optionsMenuBtn('reply-' + reply._id, [
-            { icon: 'trash-2', label: 'Delete reply', danger: true, onClick: () => confirmDeleteReply(post._id, reply._id) },
+            { icon: 'trash-2', label: 'Delete reply', danger: true, onClick: () => deleteReply(post._id, reply._id) },
         ], 'w-6 h-6'));
     }
     wrap.appendChild(top);
@@ -1115,14 +1141,12 @@ async function setPostFlags(postId, flags) {
         await authedFetch(`/api/forum/posts/${postId}`, { method: 'PATCH', body: JSON.stringify(flags) });
     } catch (e) { alert(e.message || 'Could not update post.'); }
 }
-async function confirmDeletePost(postId) {
-    if (!confirm('Delete this post? This cannot be undone.')) return;
+async function deletePost(postId) {
     try {
         await authedFetch(`/api/forum/posts/${postId}`, { method: 'DELETE' });
     } catch (e) { alert(e.message || 'Could not delete post.'); }
 }
-async function confirmDeleteReply(postId, replyId) {
-    if (!confirm('Delete this reply?')) return;
+async function deleteReply(postId, replyId) {
     try {
         await authedFetch(`/api/forum/posts/${postId}/replies/${replyId}`, { method: 'DELETE' });
     } catch (e) { alert(e.message || 'Could not delete reply.'); }
