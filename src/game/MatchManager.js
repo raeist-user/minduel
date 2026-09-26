@@ -16,6 +16,7 @@ const { settleMatch } = require('./settle');
 const COUNTDOWN_MS = 3000;
 const DISCONNECT_GRACE_MS = 20000;
 const BOT_FALLBACK_MS = 12000;
+const REMATCH_WINDOW_MS = 45000;
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I: easy to read aloud/type
 
 function makeRoomCode() {
@@ -32,6 +33,7 @@ class MatchManager {
     this.matches = new Map();   // matchId -> MatchRecord
     this.userMatch = new Map(); // userId -> matchId (only one active match per user at a time)
     this.disconnectTimers = new Map(); // userId -> { matchId, timer }
+    this.rematchable = new Map(); // matchId -> { gameId, mode, settings, partyCode, humanIds: Set, requested: Set, timer }
   }
 
   // ── Sockets ──────────────────────────────────────────────────────────────
@@ -58,6 +60,7 @@ class MatchManager {
       if (!rec || !rec.playerIds.has(userId)) return;
       rec.game.forfeit(userId);
     });
+    socket.on('match:rematch', (payload, ack) => this._safe(ack, () => this.requestRematch(userId, payload && payload.matchId)));
 
     socket.on('disconnect', () => this._onDisconnect(userId));
     this._onReconnect(userId);
@@ -250,7 +253,7 @@ class MatchManager {
     const game = new Game(env, { id: matchId, mode: settings && settings.mode, players, level, settings: settings || {} });
 
     const rec = {
-      matchId, gameId, mode: settings && settings.mode, game, players,
+      matchId, gameId, mode: settings && settings.mode, settings: settings || {}, game, players,
       playerIds: new Set(players.map((p) => p.id)),
       publicPlayers: players.map((p) => ({ id: p.id, isBot: p.isBot, username: p.username, displayName: p.displayName, avatarUrl: p.avatarUrl, rating: p.rating })),
       initPayload: game.publicInit(), startedAt: Date.now(), partyCode: opts.partyCode || null,
@@ -281,7 +284,43 @@ class MatchManager {
       console.error('settleMatch failed:', err);
     }
     this.io.to(`match:${matchId}`).emit('match:end', { matchId, rankings, deltas, extra: this._publicExtra(extra) });
+    this._offerRematch(rec);
     this._cleanupMatch(rec);
+  }
+
+  // Keeps a finished match "rematch-able" for a short window: any human who
+  // was in it can request a rematch, and once every human from the original
+  // match has asked for one, a fresh match is started with the same roster,
+  // game, and settings (fresh ratings are re-fetched, same as any new match).
+  _offerRematch(rec) {
+    const humanIds = new Set(rec.players.filter((p) => !p.isBot).map((p) => p.id));
+    if (!humanIds.size) return;
+    const timer = setTimeout(() => this._expireRematch(rec.matchId), REMATCH_WINDOW_MS);
+    this.rematchable.set(rec.matchId, {
+      gameId: rec.gameId, mode: rec.mode, settings: rec.settings, partyCode: rec.partyCode,
+      humanIds, requested: new Set(), timer,
+    });
+  }
+  _expireRematch(matchId) {
+    const rr = this.rematchable.get(matchId);
+    if (!rr) return;
+    this.rematchable.delete(matchId);
+    for (const id of rr.humanIds) this.io.to(`user:${id}`).emit('match:rematch-expired', { matchId });
+  }
+  requestRematch(userId, matchId) {
+    const rr = matchId && this.rematchable.get(matchId);
+    if (!rr) throw new Error('The rematch window has closed.');
+    if (!rr.humanIds.has(userId)) throw new Error('You were not in that match.');
+    if (this.userMatch.has(userId)) throw new Error('Finish your current match first.');
+    rr.requested.add(userId);
+    const waitingOn = Array.from(rr.humanIds).filter((id) => !rr.requested.has(id));
+    for (const id of rr.humanIds) this.io.to(`user:${id}`).emit('match:rematch-status', { matchId, waitingOn });
+    if (!waitingOn.length) {
+      clearTimeout(rr.timer);
+      this.rematchable.delete(matchId);
+      this._createMatch(rr.gameId, Array.from(rr.humanIds), rr.settings, { partyCode: rr.partyCode });
+    }
+    return {};
   }
 
   _abortMatch(matchId) {
