@@ -110,7 +110,10 @@ const listPosts = async (req, res, next) => {
 
     const authorsById = await loadAuthors(posts.flatMap(authorIdsOf));
     res.status(200).json({
-      posts: posts.map((p) => serializePost(p, authorsById, { includeBody: false })),
+      // Body is included even in the list response — the client's "Full"
+      // display mode shows a short preview of it, so trimming it here would
+      // silently make Full and Compact look identical.
+      posts: posts.map((p) => serializePost(p, authorsById, { includeBody: true })),
       page,
       hasMore: posts.length === PAGE_SIZE,
     });
