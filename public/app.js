@@ -503,6 +503,21 @@ function initSocket() {
     socket.on('match:end', onMatchEnd);
     socket.on('match:aborted', onMatchAborted);
     socket.on('match:resync', onMatchResync);
+    socket.on('match:rematch-status', ({ matchId, waitingOn }) => {
+        if (!matchState || matchState.matchId !== matchId) return;
+        const el = $('rematch-status');
+        if (!el || !waitingOn) return;
+        if (!waitingOn.length) { el.textContent = 'Starting…'; return; }
+        const names = waitingOn.map((id) => { const p = matchState.players.find((x) => x.id === id); return p ? (p.displayName || p.username) : 'a player'; });
+        el.textContent = 'Waiting on ' + names.join(', ') + '…';
+    });
+    socket.on('match:rematch-expired', ({ matchId }) => {
+        if (!matchState || matchState.matchId !== matchId) return;
+        showToast('Rematch window closed.');
+        const btn = $('rematch-btn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Rematch'; btn.classList.remove('opacity-60'); }
+        const el = $('rematch-status'); if (el) el.textContent = '';
+    });
 }
 
 // ── Home screen: games grid + party/queue card ──────────────────────────
@@ -673,6 +688,7 @@ function renderHomePartyCTA() {
 
 // ── Match screen shell ───────────────────────────────────────────────────
 function openMatchScreen() {
+    if (matchScreenOpen) { icons(); return; } // already showing (e.g. a rematch just started) — don't stack another history entry
     matchScreenOpen = true;
     ['top-bar', 'scroller', 'bottom-nav'].forEach((id) => $(id).classList.add('hidden'));
     $('match-screen').classList.remove('hidden');
@@ -681,6 +697,13 @@ function openMatchScreen() {
     icons();
 }
 function _closeMatchScreenUI() {
+    // Tell the server we're actually leaving (not just hiding the screen) so
+    // the match doesn't keep running for the other player(s) after you've
+    // gone — this was previously only a visual close, so a match could carry
+    // on indefinitely with a player who'd already left the screen.
+    if (matchState && matchState.phase !== 'ended' && socket) {
+        socket.emit('match:leave', { matchId: matchState.matchId });
+    }
     matchScreenOpen = false;
     $('match-screen').classList.add('hidden');
     $('match-screen').classList.remove('flex');
@@ -708,9 +731,11 @@ function onMatchFound(payload) {
         if (!matchState || matchState.matchId !== payload.matchId) return;
         const body = $('match-body');
         body.textContent = '';
-        body.append(h('div', { class: 'h-full flex flex-col items-center justify-center gap-3' },
-            h('div', { class: 'text-xs font-bold uppercase tracking-widest text-text-muted' }, (gameDef(matchState.gameId) || {}).label),
-            h('div', { class: 'text-6xl font-extrabold text-accent' }, n > 0 ? String(n) : 'Go!')));
+        body.append(h('div', { class: 'h-full flex flex-col items-center justify-center gap-2' },
+            h('div', { class: 'text-xs font-bold uppercase tracking-widest text-text-muted mb-1' }, (gameDef(matchState.gameId) || {}).label),
+            n > 0
+                ? h('div', { class: 'text-2xl font-semibold text-text-secondary' }, 'Starting in ', h('span', { class: 'text-accent font-extrabold' }, String(n)))
+                : h('div', { class: 'text-4xl font-extrabold text-accent' }, 'Go!')));
         icons();
         if (n <= 0) { matchState.phase = 'playing'; initGameUI(); return; }
         n--;
@@ -747,13 +772,24 @@ function onMatchEnd({ matchId, rankings, deltas }) {
     if (!matchState || matchState.matchId !== matchId) return;
     matchState.phase = 'ended';
     Object.values(GAME_UI).forEach((ui) => ui.cleanup && ui.cleanup());
-    renderResults(rankings, deltas, false);
+    showCalculating(() => renderResults(rankings, deltas, false));
 }
 function onMatchAborted({ matchId }) {
     if (!matchState || matchState.matchId !== matchId) return;
     matchState.phase = 'ended';
     Object.values(GAME_UI).forEach((ui) => ui.cleanup && ui.cleanup());
     renderResults([], {}, true);
+}
+// A brief beat between "the game just ended" and the results cards appearing —
+// long enough to read as a deliberate transition, short enough not to feel slow.
+function showCalculating(then) {
+    const body = $('match-body');
+    body.textContent = '';
+    body.append(h('div', { class: 'h-full flex flex-col items-center justify-center gap-4' },
+        h('i', { 'data-lucide': 'hourglass', class: 'w-9 h-9 text-online animate-pulse' }),
+        h('div', { class: 'text-sm font-semibold text-online' }, 'Calculating result…')));
+    icons();
+    setTimeout(then, 1400);
 }
 function renderMatchShell() {
     const def = gameDef(matchState.gameId) || {};
@@ -766,16 +802,27 @@ function renderScoreboard() {
     if (!box) return;
     box.textContent = '';
     const ui = GAME_UI[matchState.gameId];
+    const twoPlayer = matchState.players.length <= 2;
+    const avatarSize = twoPlayer ? 'w-14 h-14' : 'w-11 h-11';
     matchState.players.forEach((p) => {
         const mine = currentUser && p.id === currentUser._id;
         const val = ui && ui.scoreboardValue ? ui.scoreboardValue(p.id) : '';
-        box.append(h('div', { class: 'flex flex-col items-center gap-1 shrink-0' },
-            h('div', { class: 'relative' }, avatarEl(p, 'w-9 h-9', 'text-xs'),
-                mine ? h('span', { class: 'absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent' }) : null),
-            h('div', { class: 'text-[10px] font-bold text-text-secondary max-w-[54px] truncate' }, (p.displayName || p.username || '?') + (p.isBot ? ' 🤖' : '')),
-            h('div', { class: 'text-xs font-extrabold text-accent' }, val)));
+        box.append(h('div', { class: 'flex flex-col items-center gap-1.5 shrink-0' + (twoPlayer ? ' flex-1' : ' w-[74px]') },
+            h('div', { class: 'rounded-full p-[2px] ' + (mine ? 'bg-accent' : 'bg-border-color') },
+                avatarEl(p, avatarSize, twoPlayer ? 'text-base' : 'text-xs')),
+            h('div', { class: (twoPlayer ? 'text-sm' : 'text-[11px]') + ' font-bold truncate max-w-full text-center' }, (p.displayName || p.username || '?') + (p.isBot ? ' 🤖' : '')),
+            p.rating != null ? h('div', { class: 'text-[10px] text-text-muted -mt-1' }, String(p.rating)) : null,
+            h('div', { class: 'text-xs font-extrabold text-accent bg-white/5 px-2 py-0.5 rounded-full' }, val)));
     });
     icons();
+}
+const medalFor = (rank) => (rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null);
+function deltaBadge(delta) {
+    if (delta === undefined) return null;
+    if (delta === 0) return h('div', { class: 'flex items-center gap-0.5 text-xs font-extrabold text-text-muted' }, h('i', { 'data-lucide': 'minus', class: 'w-3.5 h-3.5' }), '0');
+    const up = delta > 0;
+    return h('div', { class: 'flex items-center gap-0.5 text-xs font-extrabold ' + (up ? 'text-online' : 'text-text-muted') },
+        h('i', { 'data-lucide': up ? 'chevron-up' : 'chevron-down', class: 'w-3.5 h-3.5' }), String(Math.abs(delta)));
 }
 function renderResults(rankings, deltas, aborted) {
     $('match-scoreboard').textContent = '';
@@ -791,33 +838,106 @@ function renderResults(rankings, deltas, aborted) {
     }
     const byId = new Map((matchState ? matchState.players : []).map((p) => [p.id, p]));
     const sorted = rankings.slice().sort((a, b) => a.rank - b.rank);
-    const list = sorted.map((r) => {
+    const bestRank = sorted.length ? sorted[0].rank : 1;
+    const tiedForBest = sorted.filter((r) => r.rank === bestRank).length;
+    const mineEntry = sorted.find((r) => currentUser && r.id === currentUser._id);
+    const headline = !mineEntry ? 'Match Complete'
+        : tiedForBest === sorted.length ? "It's a Draw"
+        : mineEntry.rank === bestRank ? 'You Won!' : 'You Lost';
+    const headlineColor = headline === 'You Won!' ? 'text-online' : headline === 'You Lost' ? 'text-red-400' : 'text-text-primary';
+
+    const card = (r) => {
+        const p = byId.get(r.id) || {};
+        const delta = deltas ? deltas[r.id] : undefined;
+        const win = r.rank === bestRank;
+        return h('div', { class: 'flex-1 min-w-0 flex flex-col items-center gap-2 bg-card-bg border rounded-2xl p-4 ' + (win ? 'border-online/50' : 'border-border-color') },
+            h('div', { class: 'rounded-full p-[2px] ' + (win ? 'bg-online' : 'bg-border-color') }, avatarEl(p, 'w-14 h-14', 'text-base')),
+            h('div', { class: 'text-sm font-bold truncate max-w-full text-center' }, (p.displayName || p.username || 'Player') + (p.isBot ? ' 🤖' : '')),
+            h('div', { class: 'text-[11px] text-text-secondary' }, r.score + ' pts'),
+            deltaBadge(delta));
+    };
+    const row = (r) => {
         const p = byId.get(r.id) || {};
         const delta = deltas ? deltas[r.id] : undefined;
         const mine = currentUser && r.id === currentUser._id;
-        return h('div', { class: 'flex items-center gap-3 py-2.5 px-3 rounded-xl ' + (mine ? 'bg-accent/10 border border-accent/30' : '') },
-            h('div', { class: 'w-7 text-center text-sm font-extrabold ' + (r.rank === 1 ? 'text-accent' : 'text-text-muted') }, '#' + r.rank),
-            avatarEl(p, 'w-9 h-9', 'text-xs'),
+        const medal = medalFor(r.rank);
+        return h('div', { class: 'flex items-center gap-3 bg-card-bg border rounded-2xl px-3.5 py-3 ' + (mine ? 'border-accent/50' : 'border-border-color') },
+            h('div', { class: 'w-7 text-center ' + (medal ? 'text-base' : 'text-sm font-extrabold text-text-muted') }, medal || ('#' + r.rank)),
+            avatarEl(p, 'w-11 h-11', 'text-xs'),
             h('div', { class: 'flex-1 min-w-0' },
                 h('div', { class: 'text-sm font-semibold truncate' }, (p.displayName || p.username || 'Player') + (p.isBot ? ' 🤖' : '')),
                 h('div', { class: 'text-[11px] text-text-secondary' }, r.score + ' pts')),
-            (delta !== undefined) ? h('div', { class: 'text-xs font-bold ' + (delta > 0 ? 'text-online' : delta < 0 ? 'text-red-400' : 'text-text-muted') }, (delta > 0 ? '+' : '') + delta) : null);
-    });
+            deltaBadge(delta));
+    };
+    const content = sorted.length === 2
+        ? h('div', { class: 'flex items-stretch gap-3 mb-2' }, sorted.map(card))
+        : h('div', { class: 'flex flex-col gap-2 mb-2' }, sorted.map(row));
+
     body.append(
         h('div', { class: 'text-center mb-5' },
             h('i', { 'data-lucide': 'trophy', class: 'w-8 h-8 text-accent mx-auto mb-2' }),
-            h('div', { class: 'text-lg font-extrabold' }, 'Match Complete')),
-        h('div', { class: 'flex flex-col gap-1' }, list),
-        h('button', { class: 'btn-press w-full bg-accent text-app-bg font-bold text-sm py-3 rounded-xl mt-6', onclick: leaveMatch }, 'Back to Home'));
+            h('div', { class: 'text-xl font-extrabold ' + headlineColor }, headline)),
+        content,
+        h('div', { id: 'rematch-status', class: 'text-center text-xs text-text-secondary h-4 mt-4 mb-1' }),
+        h('div', { class: 'flex gap-2 mt-1' },
+            h('button', { id: 'rematch-btn', class: 'btn-press flex-1 border border-accent/40 text-accent font-bold text-sm py-3 rounded-xl', onclick: requestRematch }, 'Rematch'),
+            h('button', { class: 'btn-press flex-1 bg-accent text-app-bg font-bold text-sm py-3 rounded-xl', onclick: leaveMatch }, 'Back to Home')));
     icons();
+}
+function requestRematch() {
+    if (!socket || !matchState) return;
+    const btn = $('rematch-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Waiting…'; btn.classList.add('opacity-60'); }
+    socket.emit('match:rematch', { matchId: matchState.matchId }, (res) => {
+        if (!res || !res.ok) {
+            showToast((res && res.message) || 'Could not request a rematch.');
+            if (btn) { btn.disabled = false; btn.textContent = 'Rematch'; btn.classList.remove('opacity-60'); }
+        }
+    });
 }
 
 // ── Per-game UI modules ──────────────────────────────────────────────────
 const MathDuelUI = (() => {
     let timerInt = null;
+    let value = '';
+    let locked = true; // true whenever there's no live question to answer yet
+    let keydownHandler = null;
     const clearTimer = () => { if (timerInt) clearInterval(timerInt); timerInt = null; };
+    const tryAnswer = debounce(() => {
+        if (locked || !value || !matchState.md.q) return;
+        sendAction({ type: 'answer', i: matchState.md.q.i, value });
+    }, 450); // waits for a pause in typing so "12" isn't submitted (and locked out) while aiming for "120"
+
+    function renderDisplay() {
+        const d = $('md-display');
+        if (!d) return;
+        d.textContent = '';
+        d.append(value ? h('span', {}, value) : h('span', { class: 'text-text-muted' }, '0'),
+            h('span', { class: 'inline-block w-[2px] h-6 bg-accent ml-0.5 align-middle animate-pulse' }));
+    }
+    function press(k) {
+        if (locked) return;
+        if (k === 'back') value = value.slice(0, -1);
+        else if (k === '-') value = value.startsWith('-') ? value.slice(1) : '-' + value;
+        else if (value.replace('-', '').length < 9) value += k;
+        renderDisplay();
+        tryAnswer();
+    }
+    function keypad() {
+        const key = (label, k, extraClass) => h('button', {
+            class: 'btn-press bg-white/5 hover:bg-white/10 rounded-xl py-4 text-xl font-bold ' + (extraClass || ''),
+            onclick: () => press(k),
+        }, label);
+        return h('div', { class: 'grid grid-cols-3 gap-2' },
+            key('1', '1'), key('2', '2'), key('3', '3'),
+            key('4', '4'), key('5', '5'), key('6', '6'),
+            key('7', '7'), key('8', '8'), key('9', '9'),
+            key('−', '-', 'text-text-secondary'), key('0', '0'),
+            key('⌫', 'back', 'text-text-secondary'));
+    }
     function init() {
         matchState.md = { scores: {}, q: null };
+        value = ''; locked = true;
         const body = $('match-body');
         body.textContent = '';
         body.append(
@@ -826,23 +946,28 @@ const MathDuelUI = (() => {
             h('div', { id: 'md-question', class: 'hidden' },
                 h('div', { id: 'md-topic-label', class: 'text-[11px] text-text-muted text-center mb-1' }),
                 h('div', { class: 'h-1 bg-white/10 rounded-full overflow-hidden mb-4' }, h('div', { id: 'md-bar', class: 'h-full bg-accent', style: 'width:100%' })),
-                h('div', { id: 'md-prompt', class: 'text-3xl font-extrabold text-center mb-6' }),
-                h('div', { class: 'flex gap-2' },
-                    h('input', { id: 'md-input', inputmode: 'decimal', autocomplete: 'off', placeholder: 'Your answer', class: 'flex-1 bg-transparent border border-border-color rounded-xl px-4 py-3 text-base focus:outline-none focus:border-accent', onkeydown: (e) => { if (e.key === 'Enter') mdSubmit(); } }),
-                    h('button', { class: 'btn-press bg-accent text-app-bg font-bold px-5 rounded-xl', onclick: mdSubmit }, 'Go')),
-                h('div', { id: 'md-feedback', class: 'text-center text-sm font-semibold mt-3 h-5' })));
+                h('div', { id: 'md-prompt', class: 'text-3xl font-extrabold text-center mb-5' }),
+                h('div', { id: 'md-display', class: 'text-center text-2xl font-mono font-bold mb-3 h-9 tracking-wider' }),
+                h('div', { id: 'md-feedback', class: 'text-center text-sm font-semibold mb-3 h-5' }),
+                h('div', { id: 'md-keypad' }, keypad())));
+        keydownHandler = (e) => {
+            if (/^[0-9]$/.test(e.key)) press(e.key);
+            else if (e.key === '-') press('-');
+            else if (e.key === 'Backspace') press('back');
+        };
+        document.addEventListener('keydown', keydownHandler);
     }
     function onEvent(type, data) {
         if (type === 'q') {
             matchState.md.q = { ...data, receivedAt: Date.now() };
             matchState.md.scores = data.scores;
+            value = ''; locked = false;
             $('md-wait').classList.add('hidden');
             $('md-question').classList.remove('hidden');
             $('md-topic-label').textContent = data.topic + '  ·  Q' + (data.i + 1) + '/' + data.total;
             $('md-prompt').textContent = data.prompt;
             $('md-feedback').textContent = '';
-            const input = $('md-input');
-            input.value = ''; input.disabled = false; input.focus();
+            renderDisplay();
             clearTimer();
             timerInt = setInterval(() => {
                 const q = matchState.md.q;
@@ -853,32 +978,26 @@ const MathDuelUI = (() => {
                 if (left <= 0) clearTimer();
             }, 100);
         } else if (type === 'wrong') {
+            locked = true;
             const fb = $('md-feedback');
-            if (fb) { fb.textContent = 'Not quite — try again in a moment'; fb.className = 'text-center text-sm font-semibold mt-3 h-5 text-red-400'; }
-            const input = $('md-input');
-            if (input) { input.disabled = true; setTimeout(() => { if ($('md-input') && matchState.md.q) { $('md-input').disabled = false; $('md-input').focus(); } }, Math.max(0, data.until - Date.now())); }
+            if (fb) { fb.textContent = 'Not quite — try again in a moment'; fb.className = 'text-center text-sm font-semibold mb-3 h-5 text-red-400'; }
+            setTimeout(() => { if (matchState.md && matchState.md.q) { locked = false; value = ''; renderDisplay(); if (fb) fb.textContent = ''; } }, Math.max(0, data.until - Date.now()));
         } else if (type === 'q-end') {
             clearTimer();
+            locked = true;
             matchState.md.scores = data.scores;
-            const input = $('md-input');
-            if (input) input.disabled = true;
             const mine = data.winner && currentUser && data.winner === currentUser._id;
             const fb = $('md-feedback');
             if (fb) {
                 fb.textContent = data.timedOut ? `Time's up — answer was ${data.answer}` : (mine ? 'You got it! ' : 'Opponent got it — ') + `answer: ${data.answer}`;
-                fb.className = 'text-center text-sm font-semibold mt-3 h-5 ' + (mine ? 'text-online' : 'text-text-secondary');
+                fb.className = 'text-center text-sm font-semibold mb-3 h-5 ' + (mine ? 'text-online' : 'text-text-secondary');
             }
         }
     }
     function scoreboardValue(id) { return String((matchState.md && matchState.md.scores && matchState.md.scores[id]) || 0); }
-    function cleanup() { clearTimer(); }
+    function cleanup() { clearTimer(); if (keydownHandler) document.removeEventListener('keydown', keydownHandler); keydownHandler = null; }
     return { init, onEvent, scoreboardValue, cleanup };
 })();
-function mdSubmit() {
-    const input = $('md-input');
-    if (!input || input.disabled || !input.value.trim() || !matchState.md.q) return;
-    sendAction({ type: 'answer', i: matchState.md.q.i, value: input.value.trim() });
-}
 
 const WpmDuelUI = (() => {
     const sendProgress = debounce((text) => sendAction({ type: 'progress', text }), 120);
