@@ -70,7 +70,7 @@
     .seg-btn.active { color: #FFFFFF; background: #292929; }
 
     /* Filter trigger button */
-    .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; }
+    .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; white-space: nowrap; }
     .filter-btn.has-active { border-color: #E2B714; color: #E2B714; }
     .filter-btn.is-open { border-color: #4A4A4A; color: #FFFFFF; }
 
@@ -97,8 +97,20 @@
     .reax-badge { border: 1px solid #3A3A3A; color: #A2A2A2; }
     .reax-badge.mine { border-color: #E2B714; color: #E2B714; background: rgba(226,183,20,.1); }
 
-    /* Reply bubble */
-    .reply-bubble { background: #1E1E1E; border: 1px solid #3A3A3A; }
+    /* Reply bubble — visually subordinate to post cards: no fill, thin
+       accent rail, tighter type/padding, so comments read as nested
+       replies rather than repeating the card treatment at a bigger size. */
+    .reply-bubble { background: transparent; border: none; border-left: 2px solid #3A3A3A; padding-left: 12px; }
+    .reply-bubble .reply-body { font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+
+    /* Post/thread options menu ("⋮") */
+    .icon-menu-btn { color: #747474; transition: all .15s; }
+    .icon-menu-btn:hover { color: #FFFFFF; background: rgba(255,255,255,.06); }
+    .menu-item { color: #A2A2A2; transition: all .15s; }
+    .menu-item:hover { background: #252525; color: #FFFFFF; }
+    .menu-item.danger { color: #F87171; }
+    .menu-item.danger:hover { background: rgba(248,113,113,.1); color: #F87171; }
+    .menu-item.active { color: #E2B714; }
 
     textarea { font-family: inherit; }
     textarea::-webkit-scrollbar { width: 0; }
@@ -151,35 +163,35 @@
         </div>
 
         <!-- Filter bar: three independent dropdown buttons (Sort / Topic / Display) -->
-        <div class="flex-shrink-0 px-5 pt-3 pb-3 flex items-center gap-2">
-            <div class="relative">
+        <div class="flex-shrink-0 px-5 pt-3 pb-3 flex items-center gap-2 overflow-x-auto" style="scrollbar-width:none">
+            <div class="relative shrink-0">
                 <button id="sort-toggle-btn" onclick="toggleDropdown('sort')" aria-label="Sort"
                     class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
-                    <i data-lucide="arrow-up-down" class="w-3.5 h-3.5"></i>
+                    <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 shrink-0"></i>
                     <span id="sort-toggle-label">Recent activity</span>
-                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                    <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
                 </button>
                 <div id="sort-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
             </div>
 
-            <div class="relative">
+            <div class="relative shrink-0">
                 <button id="topic-toggle-btn" onclick="toggleDropdown('topic')" aria-label="Topic"
                     class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
-                    <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                    <i data-lucide="layers" class="w-3.5 h-3.5 shrink-0"></i>
                     <span id="topic-toggle-label">All topics</span>
-                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                    <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
                 </button>
                 <div id="topic-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
             </div>
 
-            <div class="relative">
+            <div class="relative shrink-0">
                 <button id="display-toggle-btn" onclick="toggleDropdown('display')" aria-label="Display"
                     class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
-                    <i data-lucide="rows-3" class="w-3.5 h-3.5"></i>
+                    <i data-lucide="rows-3" class="w-3.5 h-3.5 shrink-0"></i>
                     <span id="display-toggle-label">Full</span>
-                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                    <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
                 </button>
-                <div id="display-dropdown" class="filter-panel hidden absolute left-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
+                <div id="display-dropdown" class="filter-panel hidden absolute right-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
             </div>
         </div>
 
@@ -201,13 +213,14 @@
             <button onclick="closeThread()" aria-label="Back" class="btn-press w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5">
                 <i data-lucide="chevron-left" class="w-5 h-5"></i>
             </button>
-            <div id="thread-head-title" class="text-sm font-semibold truncate flex-1 min-w-0"></div>
-            <button id="thread-pin-btn" onclick="togglePin()" class="btn-press hidden w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5" title="Pin post">
-                <i data-lucide="pin" class="w-4 h-4"></i>
-            </button>
-            <button id="thread-lock-btn" onclick="toggleLock()" class="btn-press hidden w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5" title="Lock post">
-                <i data-lucide="lock" class="w-4 h-4"></i>
-            </button>
+            <div class="flex-1 min-w-0"></div>
+            <div id="thread-menu-wrap" class="relative shrink-0">
+                <button id="thread-menu-btn" onclick="toggleThreadMenu()" aria-label="Post options" title="Post options"
+                    class="btn-press hidden w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5">
+                    <i data-lucide="more-vertical" class="w-4.5 h-4.5"></i>
+                </button>
+                <div id="thread-menu" class="filter-panel hidden absolute right-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
+            </div>
         </div>
 
         <div id="thread-scroller" class="flex-1 overflow-y-auto px-5 py-5" style="overscroll-behavior: contain">
@@ -218,7 +231,7 @@
                     <span id="thread-reply-count" class="text-[11px] font-semibold text-text-muted"></span>
                     <div class="h-px bg-border-color flex-1"></div>
                 </div>
-                <div id="thread-replies" class="flex flex-col gap-3"></div>
+                <div id="thread-replies" class="flex flex-col gap-4"></div>
             </div>
         </div>
 
@@ -487,6 +500,12 @@ async function init() {
         if (state.reactPickerOpenFor && !e.target.closest('.react-picker') && !e.target.closest('.react-trigger')) {
             closeReactPicker();
         }
+        if (openOptionsMenu && !e.target.closest('.icon-menu-btn') && !openOptionsMenu.el.contains(e.target)) {
+            closeOptionsMenu();
+        }
+        if (!$('thread-menu').classList.contains('hidden') && !e.target.closest('#thread-menu-wrap')) {
+            $('thread-menu').classList.add('hidden');
+        }
     });
 }
 init();
@@ -569,6 +588,61 @@ function filterOption(icon, label, active, onClick) {
     }
     btn.onclick = onClick;
     return btn;
+}
+
+// ── Reusable "⋮" options menu — used on post cards, the open thread's
+// header (post-level pin/lock/delete), and each reply (delete only). ──
+let openOptionsMenu = null; // { key, el } — tracks which menu is currently open
+function closeOptionsMenu() {
+    if (openOptionsMenu) { openOptionsMenu.el.remove(); openOptionsMenu = null; }
+}
+function menuItem(icon, label, danger, active, onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'menu-item btn-press flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-left w-full' + (danger ? ' danger' : '') + (active ? ' active' : '');
+    btn.innerHTML = `<i data-lucide="${icon}" class="w-3.5 h-3.5 shrink-0"></i><span class="flex-1">${label}</span>`;
+    btn.onclick = (e) => { e.stopPropagation(); closeOptionsMenu(); onClick(); };
+    return btn;
+}
+// items: array of { icon, label, danger?, active?, onClick }
+function openOptionsMenuFor(key, anchorEl, items) {
+    if (openOptionsMenu && openOptionsMenu.key === key) return closeOptionsMenu();
+    closeOptionsMenu();
+    const menu = document.createElement('div');
+    menu.className = 'filter-panel fixed z-[150] rounded-xl p-1.5 min-w-[168px]';
+    items.forEach((it) => menu.appendChild(menuItem(it.icon, it.label, it.danger, it.active, it.onClick)));
+    document.body.appendChild(menu);
+    const r = anchorEl.getBoundingClientRect();
+    const top = r.bottom + 6;
+    let left = r.right - menu.offsetWidth;
+    left = Math.max(8, Math.min(left, window.innerWidth - menu.offsetWidth - 8));
+    menu.style.top = top + 'px';
+    menu.style.left = left + 'px';
+    openOptionsMenu = { key, el: menu };
+    lucide.createIcons();
+}
+function optionsMenuBtn(key, items, size = 'w-7 h-7') {
+    const btn = document.createElement('button');
+    btn.setAttribute('aria-label', 'Options');
+    btn.className = `icon-menu-btn btn-press shrink-0 ${size} rounded-full flex items-center justify-center`;
+    btn.innerHTML = '<i data-lucide="more-vertical" class="w-4 h-4"></i>';
+    btn.onclick = (e) => { e.stopPropagation(); openOptionsMenuFor(key, btn, items); };
+    return btn;
+}
+
+// Menu items for a post: staff get Pin + Lock toggles, owner-or-staff get
+// Delete. Shared by the list card's "⋮" and the open thread's header "⋮".
+function postMenuItems(post) {
+    const staff = isStaffRole(currentUser.role);
+    const isOwner = myKey() && String(post.author._id) === String(myKey());
+    const items = [];
+    if (staff) {
+        items.push({ icon: 'pin', label: post.pinned ? 'Unpin post' : 'Pin post', active: post.pinned, onClick: () => setPostFlags(post._id, { pinned: !post.pinned }) });
+        items.push({ icon: 'lock', label: post.locked ? 'Unlock post' : 'Lock post', active: post.locked, onClick: () => setPostFlags(post._id, { locked: !post.locked }) });
+    }
+    if (staff || isOwner) {
+        items.push({ icon: 'trash-2', label: 'Delete post', danger: true, onClick: () => confirmDeletePost(post._id) });
+    }
+    return items;
 }
 function updateToggleLabels() {
     $('sort-toggle-label').textContent = (SORTS.find((s) => s.id === state.sort) || SORTS[0]).name;
@@ -712,6 +786,11 @@ function postCard(post) {
     time.className = 'text-[11px] text-text-muted shrink-0';
     time.textContent = relTime(post.lastActivityAt || post.createdAt);
     top.appendChild(time);
+
+    const canModifyCard = isStaffRole(currentUser.role) || (myKey() && String(post.author._id) === String(myKey()));
+    if (canModifyCard && state.display !== 'title') {
+        top.appendChild(optionsMenuBtn('post-' + post._id, postMenuItems(post), 'w-6 h-6'));
+    }
     card.appendChild(top);
 
     if (state.display === 'title') return card;
@@ -795,17 +874,32 @@ function closeThread() {
     renderList();
 }
 
+function toggleThreadMenu() {
+    const menu = $('thread-menu');
+    if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
+    renderThreadMenu();
+    menu.classList.remove('hidden');
+}
+function renderThreadMenu() {
+    const menu = $('thread-menu');
+    menu.innerHTML = '';
+    if (!state.thread) return;
+    postMenuItems(state.thread).forEach((it) => menu.appendChild(menuItem(it.icon, it.label, it.danger, it.active, () => {
+        menu.classList.add('hidden');
+        it.onClick();
+    })));
+    lucide.createIcons();
+}
+
 function renderThread() {
     const post = state.thread;
     if (!post) return closeThread();
     const meta = tagMeta(post.tag);
     const staff = isStaffRole(currentUser.role);
 
-    $('thread-head-title').textContent = post.title;
-    $('thread-pin-btn').classList.toggle('hidden', !staff);
-    $('thread-lock-btn').classList.toggle('hidden', !staff);
-    $('thread-pin-btn').classList.toggle('text-accent', post.pinned);
-    $('thread-lock-btn').classList.toggle('text-accent', post.locked);
+    const canModifyThread = staff || (myKey() && String(post.author._id) === String(myKey()));
+    $('thread-menu-btn').classList.toggle('hidden', !canModifyThread);
+    $('thread-menu').classList.add('hidden');
 
     const op = $('thread-op');
     op.innerHTML = '';
@@ -841,15 +935,6 @@ function renderThread() {
 
     op.appendChild(reactionRow(post, null));
 
-    const canModify = staff || (myKey() && String(post.author._id) === String(myKey()));
-    if (canModify) {
-        const delBtn = document.createElement('button');
-        delBtn.className = 'mt-3 text-[11px] text-red-400/80 hover:text-red-400 flex items-center gap-1';
-        delBtn.innerHTML = '<i data-lucide="trash-2" class="w-3 h-3"></i><span>Delete post</span>';
-        delBtn.onclick = () => confirmDeletePost(post._id);
-        op.appendChild(delBtn);
-    }
-
     const visibleReplies = post.replies;
     $('thread-reply-count').textContent = `${visibleReplies.filter((r) => !r.deleted).length} ${visibleReplies.filter((r) => !r.deleted).length === 1 ? 'reply' : 'replies'}`;
 
@@ -865,36 +950,33 @@ function renderThread() {
 
 function replyBubble(post, reply) {
     const wrap = document.createElement('div');
-    wrap.className = 'reply-bubble rounded-xl p-3.5 fade-in';
+    wrap.className = 'reply-bubble fade-in';
     const top = document.createElement('div');
-    top.className = 'flex items-center gap-2 mb-2';
-    top.appendChild(avatarEl(reply.author, 22));
+    top.className = 'flex items-center gap-2 mb-1.5';
+    top.appendChild(avatarEl(reply.author, 20));
     const nameLine = document.createElement('div');
     nameLine.className = 'text-xs font-semibold flex items-center gap-1.5 flex-1 min-w-0';
     nameLine.append(document.createTextNode(reply.author.displayName));
     const badge = badgeEl(reply.author);
     if (badge) nameLine.appendChild(badge);
     top.appendChild(nameLine);
-    const time = document.createElement('span'); time.className = 'text-[11px] text-text-muted shrink-0'; time.textContent = relTime(reply.createdAt);
+    const time = document.createElement('span'); time.className = 'text-[10px] text-text-muted shrink-0'; time.textContent = relTime(reply.createdAt);
     top.appendChild(time);
+
+    const canModify = isStaffRole(currentUser.role) || (myKey() && String(reply.author._id) === String(myKey()));
+    if (!reply.deleted && canModify) {
+        top.appendChild(optionsMenuBtn('reply-' + reply._id, [
+            { icon: 'trash-2', label: 'Delete reply', danger: true, onClick: () => confirmDeleteReply(post._id, reply._id) },
+        ], 'w-6 h-6'));
+    }
     wrap.appendChild(top);
 
     const body = document.createElement('p');
-    body.className = 'text-sm whitespace-pre-wrap mb-2' + (reply.deleted ? ' text-text-muted italic' : ' text-text-primary');
+    body.className = 'reply-body mb-1.5' + (reply.deleted ? ' text-text-muted italic' : ' text-text-primary');
     body.textContent = reply.body;
     wrap.appendChild(body);
 
-    if (!reply.deleted) {
-        wrap.appendChild(reactionRow(post, reply));
-        const canModify = isStaffRole(currentUser.role) || (myKey() && String(reply.author._id) === String(myKey()));
-        if (canModify) {
-            const delBtn = document.createElement('button');
-            delBtn.className = 'mt-2 text-[11px] text-red-400/80 hover:text-red-400 flex items-center gap-1';
-            delBtn.innerHTML = '<i data-lucide="trash-2" class="w-3 h-3"></i><span>Delete</span>';
-            delBtn.onclick = () => confirmDeleteReply(post._id, reply._id);
-            wrap.appendChild(delBtn);
-        }
-    }
+    if (!reply.deleted) wrap.appendChild(reactionRow(post, reply));
     return wrap;
 }
 
@@ -1028,23 +1110,10 @@ async function submitReply() {
 }
 
 // ── Staff moderation actions ─────────────────────────────────────────
-async function togglePin() {
-    if (!state.thread) return;
+async function setPostFlags(postId, flags) {
     try {
-        await authedFetch(`/api/forum/posts/${state.thread._id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ pinned: !state.thread.pinned }),
-        });
-    } catch (e) { alert(e.message || 'Could not update pin.'); }
-}
-async function toggleLock() {
-    if (!state.thread) return;
-    try {
-        await authedFetch(`/api/forum/posts/${state.thread._id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ locked: !state.thread.locked }),
-        });
-    } catch (e) { alert(e.message || 'Could not update lock.'); }
+        await authedFetch(`/api/forum/posts/${postId}`, { method: 'PATCH', body: JSON.stringify(flags) });
+    } catch (e) { alert(e.message || 'Could not update post.'); }
 }
 async function confirmDeletePost(postId) {
     if (!confirm('Delete this post? This cannot be undone.')) return;
