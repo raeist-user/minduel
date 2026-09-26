@@ -230,6 +230,13 @@ const toggleReaction = async (req, res, next) => {
     if (next_.length) target.reactions.set(emoji, next_);
     else target.reactions.delete(emoji);
 
+    // Mongoose's change detection can miss a Map mutation on a subdocument
+    // nested inside an array (post.replies.N.reactions) even though .set()/
+    // .delete() are the correct Map methods — mark it explicitly so the
+    // reaction actually persists on save() instead of silently no-opping.
+    if (replyId) post.markModified(`replies.${post.replies.indexOf(target)}.reactions`);
+    else post.markModified('reactions');
+
     await post.save();
 
     const payload = { postId: post._id, replyId: replyId || null, emoji, userId: req.user._id, added: !has };

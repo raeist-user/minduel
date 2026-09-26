@@ -10,21 +10,20 @@ const mongoose = require('mongoose');
 const TAGS = ['general', 'strategy', 'bugs', 'feedback', 'offtopic'];
 const REACTIONS = ['👍', '🔥', '❤️', '😂'];
 
-const reactionsSchema = new mongoose.Schema(
-  {
-    // Map of emoji -> array of user ObjectIds who reacted with it. Only
-    // emojis in REACTIONS are ever written (enforced in the controller).
-    type: Map,
-    of: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  },
-  { _id: false }
-);
+// Map of emoji -> array of user ObjectIds who reacted with it. Only emojis
+// in REACTIONS are ever written (enforced in the controller). Declared
+// inline as { type: Map, of: [...] } directly on the owning schema — this
+// shorthand only works as a path definition, NOT wrapped in its own
+// mongoose.Schema(), which would create a subdocument with literal "type"
+// and "of" fields instead of an actual Map. A factory (not a shared object)
+// so each schema path gets its own definition object.
+const reactionsField = () => ({ type: Map, of: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: () => ({}) });
 
 const replySchema = new mongoose.Schema(
   {
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     body: { type: String, required: true, trim: true, maxlength: 4000 },
-    reactions: { type: reactionsSchema, default: () => ({}) },
+    reactions: reactionsField(),
     editedAt: { type: Date },
     deleted: { type: Boolean, default: false }, // soft-delete: keeps reply count/order stable
   },
@@ -37,7 +36,7 @@ const postSchema = new mongoose.Schema(
     tag: { type: String, enum: TAGS, default: 'general' },
     title: { type: String, required: true, trim: true, maxlength: 120 },
     body: { type: String, required: true, trim: true, maxlength: 8000 },
-    reactions: { type: reactionsSchema, default: () => ({}) },
+    reactions: reactionsField(),
     replies: { type: [replySchema], default: [] },
 
     pinned: { type: Boolean, default: false },
