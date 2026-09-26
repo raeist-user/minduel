@@ -69,9 +69,10 @@
     .seg-btn { color: #747474; transition: all .15s; }
     .seg-btn.active { color: #FFFFFF; background: #292929; }
 
-    /* Filter trigger button: fixed width regardless of label content —
-       the label truncates with an ellipsis instead of resizing the pill. */
-    .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; width: 152px; }
+    /* Filter trigger button: equal flexible width AND a fixed height, so all
+       three always fit one screen side by side and none is ever taller than
+       the others — label truncates with an ellipsis instead of wrapping. */
+    .filter-btn { border: 1px solid #3A3A3A; color: #A2A2A2; transition: all .15s; flex: 1 1 0; min-width: 0; height: 38px; }
     .filter-btn-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; text-align: left; }
     .filter-btn.has-active { border-color: #E2B714; color: #E2B714; }
     .filter-btn.is-open { border-color: #4A4A4A; color: #FFFFFF; }
@@ -164,28 +165,29 @@
             </div>
         </div>
 
-        <!-- Filter bar: three independent dropdown buttons (Sort / Topic / Display).
-             Buttons are fixed-width pills in a horizontally scrollable row;
-             each dropdown itself is rendered fixed-position (see
-             openFilterDropdown in the script) so it floats above the page
-             instead of being clipped by this row's own scroll container. -->
-        <div class="flex-shrink-0 px-5 pt-3 pb-3 flex items-center gap-2 overflow-x-auto" style="scrollbar-width:none">
+        <!-- Filter bar: three independent dropdown buttons (Sort / Topic / Display),
+             each taking an equal third of the row so all three always fit on
+             screen without wrapping or scrolling. Each dropdown itself is
+             rendered fixed-position (see positionDropdown in the script) so
+             it floats above the page instead of being clipped by any
+             ancestor's overflow. -->
+        <div class="flex-shrink-0 px-5 pt-3 pb-3 flex items-center gap-2">
             <button id="sort-toggle-btn" onclick="toggleDropdown('sort')" aria-label="Sort"
-                class="filter-btn btn-press shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold">
                 <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 shrink-0"></i>
                 <span id="sort-toggle-label" class="filter-btn-label">Recent activity</span>
                 <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
             </button>
 
             <button id="topic-toggle-btn" onclick="toggleDropdown('topic')" aria-label="Topic"
-                class="filter-btn btn-press shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold">
                 <i data-lucide="layers" class="w-3.5 h-3.5 shrink-0"></i>
                 <span id="topic-toggle-label" class="filter-btn-label">All topics</span>
                 <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
             </button>
 
             <button id="display-toggle-btn" onclick="toggleDropdown('display')" aria-label="Display"
-                class="filter-btn btn-press shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold">
+                class="filter-btn btn-press flex items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold">
                 <i data-lucide="rows-3" class="w-3.5 h-3.5 shrink-0"></i>
                 <span id="display-toggle-label" class="filter-btn-label">Full</span>
                 <i data-lucide="chevron-down" class="w-3 h-3 shrink-0"></i>
@@ -217,14 +219,16 @@
                 <i data-lucide="chevron-left" class="w-5 h-5"></i>
             </button>
             <div class="flex-1 min-w-0"></div>
-            <div id="thread-menu-wrap" class="relative shrink-0">
+            <div id="thread-menu-wrap" class="shrink-0">
                 <button id="thread-menu-btn" onclick="toggleThreadMenu()" aria-label="Post options" title="Post options"
                     class="btn-press hidden w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5">
                     <i data-lucide="more-vertical" class="w-4.5 h-4.5"></i>
                 </button>
-                <div id="thread-menu" class="filter-panel hidden absolute right-0 top-[calc(100%+6px)] z-30 rounded-xl p-1.5 min-w-[168px]"></div>
             </div>
         </div>
+        <!-- Rendered fixed-position (see toggleThreadMenu), not anchored
+             inside the header, so header/nav z-40 bars can never sit above it. -->
+        <div id="thread-menu" class="filter-panel hidden fixed z-[150] rounded-xl p-1.5 min-w-[168px]"></div>
 
         <div id="thread-scroller" class="flex-1 overflow-y-auto px-5 py-5" style="overscroll-behavior: contain">
             <div class="max-w-[520px] w-full mx-auto">
@@ -506,15 +510,15 @@ async function init() {
         if (openOptionsMenu && !e.target.closest('.icon-menu-btn') && !openOptionsMenu.el.contains(e.target)) {
             closeOptionsMenu();
         }
-        if (!$('thread-menu').classList.contains('hidden') && !e.target.closest('#thread-menu-wrap')) {
+        if (!$('thread-menu').classList.contains('hidden') && !e.target.closest('#thread-menu-wrap') && !e.target.closest('#thread-menu')) {
             $('thread-menu').classList.add('hidden');
         }
     });
     // Floating panels are position:fixed and computed once on open; rather
     // than re-tracking their anchor through every scroll/resize, just close
     // them — standard behavior for floating menus.
-    window.addEventListener('scroll', () => { closeDropdown(); closeReactPicker(); closeOptionsMenu(); }, true);
-    window.addEventListener('resize', () => { closeDropdown(); closeReactPicker(); closeOptionsMenu(); });
+    window.addEventListener('scroll', () => { closeDropdown(); closeReactPicker(); closeOptionsMenu(); $('thread-menu').classList.add('hidden'); }, true);
+    window.addEventListener('resize', () => { closeDropdown(); closeReactPicker(); closeOptionsMenu(); $('thread-menu').classList.add('hidden'); });
 }
 init();
 
@@ -905,6 +909,12 @@ function toggleThreadMenu() {
     if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
     renderThreadMenu();
     menu.classList.remove('hidden');
+    const btn = $('thread-menu-btn');
+    const r = btn.getBoundingClientRect();
+    menu.style.top = (r.bottom + 6) + 'px';
+    let left = r.right - menu.offsetWidth;
+    left = Math.max(8, Math.min(left, window.innerWidth - menu.offsetWidth - 8));
+    menu.style.left = left + 'px';
 }
 function renderThreadMenu() {
     const menu = $('thread-menu');
