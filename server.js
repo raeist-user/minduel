@@ -3,22 +3,26 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
+const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
-const { Server } = require('socket.io');
 const connectDB = require('./src/db');
 const authRoutes = require('./src/authRoutes');
 const adminRoutes = require('./src/adminRoutes');
 const userRoutes = require('./src/userRoutes');
 const friendRoutes = require('./src/friendRoutes');
 const dmRoutes = require('./src/dmRoutes');
+const forumRoutes = require('./src/forumRoutes');
 const { verifyEmailSetup } = require('./src/emailService');
 const { notFound, errorHandler } = require('./src/errorMiddleware');
 const { socketAuth } = require('./src/socketAuth');
 const { MatchManager } = require('./src/game/MatchManager');
 
 const app = express();
+// Wrapping app in a plain http.Server so Socket.io can share the same port
+// as the Express API, instead of running a second server/port.
+const httpServer = http.createServer(app);
 
 // Render sits behind a reverse proxy; trust the first hop so req.ip and
 // express-rate-limit read the real client IP from X-Forwarded-For.
@@ -78,23 +82,36 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/dm', dmRoutes);
+app.use('/api/forum', forumRoutes);
 
 // --- Error handling (must be last) ---
 app.use(notFound);
 app.use(errorHandler);
 
-// --- Real-time (Socket.io): parties, matchmaking, live games ---
-// Wraps the same Express app in a plain http.Server so HTTP and WebSocket
-// traffic share one port (what Render/most hosts expect).
-const httpServer = http.createServer(app);
+// --- Socket.io: live forum updates + real-time games share one server ---
+// Same CORS allowlist as the REST API, and the same JWT the client already
+// holds is used to authenticate the handshake (see socketAuth.js).
 const io = new Server(httpServer, {
   cors: { origin: allowedOrigins.length ? allowedOrigins : '*', credentials: true },
 });
 io.use(socketAuth);
-app.set('io', io); // lets adminController.kickUser() reach live sockets from an HTTP request
+// Lets forumController.js and adminController.kickUser() reach live sockets
+// from an HTTP request via req.app.get('io'), without importing server.js
+// (which would create a require cycle).
+app.set('io', io);
 
+// Everything that turns a socket connection into parties/matchmaking/live
+// games (see src/game/MatchManager.js for the full event list).
 const matchManager = new MatchManager(io);
-io.on('connection', (socket) => matchManager.attach(socket));
+
+io.on('connection', (socket) => {
+  // Everyone connected is in one "forum" room; the forum controller emits
+  // post/reply/reaction/moderation events into it. Small-scale for now —
+  // if the forum grows, per-tag rooms can be added without touching clients
+  // that just listen on room "forum".
+  socket.join('forum');
+  matchManager.attach(socket);
+});
 
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => {
